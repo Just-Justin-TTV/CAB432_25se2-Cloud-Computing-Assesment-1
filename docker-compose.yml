@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+  # ----- Database Service -----
+  db:
+    image: mariadb:11
+    container_name: CAB432-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: CAB432db
+      MYSQL_USER: CAB432user
+      MYSQL_PASSWORD: CAB432pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  # ----- Ollama Service -----
+  ollama:
+    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-ollama:latest
+    container_name: cab432-ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    command: >
+      sh -c "ollama serve &
+             until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
+             ollama pull mistral &&
+             wait"  
+
+  # ----- Web Application Service -----
+  web:
+    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-web:latest
+    container_name: CAB432-web
+    command: >
+      sh -c "python db.py &&
+             python manage.py runserver 0.0.0.0:8000 &
+             until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
+             python load_test.py > /code/load_test.log 2>&1"
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: db
+      DB_NAME: CAB432db
+      DB_USER: CAB432user
+      DB_PASSWORD: CAB432pass
+      OLLAMA_HOST: "http://cab432-ollama:11434"
+      TEST_USERNAME: "testuser"
+      TEST_PASSWORD: "password123"
+      LOAD_TEST_URL: "http://localhost:8000/match_resume_to_job/1"
+      LOAD_TEST_DURATION: "30"
+      LOAD_TEST_THREADS: "5"
+    depends_on:
+      - db
+      - ollama
+
+# ----- Named Volumes -----
+volumes:
+  db_data:
+  ollama_data:

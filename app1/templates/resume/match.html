@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Match Resume to Job</h2>
+  <p><strong>Resume:</strong> {{ resume.original_file.name }}</p>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label for="job_position" class="form-label">Job Position</label>
+      <input type="text" id="job_position" name="job_position" class="form-control" placeholder="e.g. Data Analyst">
+    </div>
+    <button type="submit" class="btn btn-success">Check Match</button>
+  </form>
+</div>
+{% endblock %}

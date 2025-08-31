@@ -1,0 +1,18 @@
+# Ignore Python bytecode caches, which are automatically generated and not needed in version control
+__pycache__ 
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore local database files that may contain sensitive or environment-specific data
+*.db
+*.sqlite3
+
+# Ignore log files that are created at runtime for debugging or monitoring
+*.log
+
+# Ignore environment variable files, which may contain secrets like API keys or passwords
+.env
+
+# Ignore local virtual environment directories, as they can be recreated from requirements.txt
+venv

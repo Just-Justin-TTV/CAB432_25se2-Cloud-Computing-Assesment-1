@@ -1,0 +1,94 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Resume Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="h-screen bg-gray-50 font-sans">
+<div class="flex h-full">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white border-r shadow flex flex-col items-center py-6">
+        <img src="{% static 'images/img4.jpg' %}" alt="Logo" />
+        <ul class="w-full px-4 space-y-2">
+            <li>
+                <a href="{% url 'dashboard' %}" class="flex items-center p-3 rounded-lg bg-cyan-500 text-white font-medium shadow">
+                    <span class="material-icons mr-3">dashboard</span>
+                    Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="#" class="flex items-center px-4 py-3 rounded-lg shadow hover:bg-gray-100">
+                    <span class="material-icons mr-3">person</span>
+                    Candidates
+                </a>
+            </li>
+            <li>
+                <a href="#" class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-100">
+                    <span class="material-icons mr-3">description</span>
+                    Resumes
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 p-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-semibold">Resume Dashboard</h1>
+            <p class="text-sm text-gray-500">Welcome, Admin</p>
+        </div>
+
+        <!-- Recent resumes table -->
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Recent Resumes</h2>
+            <a href="{% url 'upload_resume' %}" class="bg-cyan-500 text-white px-4 py-2 rounded shadow hover:bg-cyan-600">
+                + Upload Resume
+            </a>
+        </div>
+
+        <table class="min-w-full bg-white shadow rounded mb-6">
+            <thead>
+            <tr class="bg-gray-100 text-left text-sm font-medium text-gray-600">
+                <th class="px-4 py-2">User</th>
+                <th class="px-4 py-2">Job Position</th>
+                <th class="px-4 py-2">Match Score</th>
+                <th class="px-4 py-2">AI Feedback</th>
+                <th class="px-4 py-2">Actions</th>
+            </tr>
+            </thead>
+            <tbody class="text-sm text-gray-700">
+            {% for job_app in job_applications %}
+                <tr>
+                    <td class="px-4 py-2">{{ job_app.user.username }}</td>
+                    <td class="px-4 py-2">{{ job_app.job_description|truncatechars:50 }}</td>
+                    <td class="px-4 py-2">{{ job_app.score|floatformat:2 }}</td>
+                    <td class="px-4 py-2">
+                        {% if job_app.feedback %}
+                            {{ job_app.feedback|truncatechars:80 }}
+                        {% else %}
+                            <em>No feedback yet</em>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2">
+                        <a href="{% url 'view_job_application' job_app.id %}" class="text-cyan-600 hover:underline">
+                            View
+                        </a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="5" class="px-4 py-2 text-center text-gray-500">No resumes found.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </main>
+</div>
+</body>
+</html>
