@@ -57,9 +57,9 @@ WSGI_APPLICATION = 'app1.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.environ.get("DB_NAME", "ifb398db"),
-        "USER": os.environ.get("DB_USER", "ifb398user"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "ifb398pass"),
+        "NAME": os.environ.get("DB_NAME", "CAB432db"),
+        "USER": os.environ.get("DB_USER", "CAB432user"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "CAB432pass"),
         "HOST": os.environ.get("DB_HOST", "db"),
         "PORT": os.environ.get("DB_PORT", "3306"),
     }

@@ -14,6 +14,8 @@ services:
       - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
+    networks:
+      - cab432-network
 
   ollama:
     image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-ollama:latest
@@ -27,14 +29,16 @@ services:
       sh -c "ollama serve &
              until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
              ollama pull mistral &&
-             wait"  
+             wait"
+    networks:
+      - cab432-network
 
   web:
     image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-web:latest
     container_name: CAB432-web
     command: >
       sh -c "python db.py &&
-             python manage.py runserver 0.0.0.0:8000 &
+             python manage.py runserver 0.0.0.0:8000 & 
              until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
              python load_test.py > /code/load_test.log 2>&1"
     volumes:
@@ -55,7 +59,13 @@ services:
     depends_on:
       - db
       - ollama
+    networks:
+      - cab432-network
 
 volumes:
   db_data:
   ollama_data:
+
+networks:
+  cab432-network:
+    driver: bridge
