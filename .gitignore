@@ -1,0 +1,22 @@
+# Python environment
+venv/
+__pycache__/
+*.pyc
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+
+# Logs
+load_test.log
+load_test_cpu.log
+
+# Docker
+*.env
+*.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db

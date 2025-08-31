@@ -1782,3 +1782,12 @@ Logged in as testuser successfully
 2025-08-31 12:20:21.507386 | Iteration 1780 | Duration: 0.01s | CPU: 1.2% | Status: 200
 2025-08-31 12:20:24.608053 | Iteration 1781 | Duration: 0.01s | CPU: 1.2% | Status: 200
 2025-08-31 12:20:27.730075 | Iteration 1782 | Duration: 0.01s | CPU: 2.5% | Status: 200
+2025-08-31 12:20:30.795365 | Iteration 1783 | Duration: 0.01s | CPU: 15.6% | Status: 200
+2025-08-31 12:20:31.913219 | Iteration 1784 | Duration: 0.01s | CPU: 1.2% | Status: 200
+2025-08-31 12:20:34.996891 | Iteration 1785 | Duration: 0.01s | CPU: 2.5% | Status: 200
+2025-08-31 12:20:38.087479 | Iteration 1786 | Duration: 0.01s | CPU: 1.2% | Status: 200
+2025-08-31 12:20:41.164815 | Iteration 1787 | Duration: 0.01s | CPU: 3.8% | Status: 200
+2025-08-31 12:20:44.262502 | Iteration 1788 | Duration: 0.01s | CPU: 1.2% | Status: 200
+2025-08-31 12:20:47.445759 | Iteration 1789 | Duration: 0.01s | CPU: 0.6% | Status: 200
+2025-08-31 12:20:50.511288 | Iteration 1790 | Duration: 0.01s | CPU: 13.8% | Status: 200
+2025-08-31 12:20:53.524462 | Iteration 1791 | Duration: 0.01s | CPU: 1.9% | Status: 200
