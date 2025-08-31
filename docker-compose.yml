@@ -1,7 +1,6 @@
 version: '3.9'
 
 services:
-  # ----- Database Service -----
   db:
     image: mariadb:11
     container_name: CAB432-db
@@ -16,7 +15,6 @@ services:
     volumes:
       - db_data:/var/lib/mysql
 
-  # ----- Ollama Service -----
   ollama:
     image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-ollama:latest
     container_name: cab432-ollama
@@ -31,7 +29,6 @@ services:
              ollama pull mistral &&
              wait"  
 
-  # ----- Web Application Service -----
   web:
     image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-web:latest
     container_name: CAB432-web
@@ -59,7 +56,6 @@ services:
       - db
       - ollama
 
-# ----- Named Volumes -----
 volumes:
   db_data:
   ollama_data:

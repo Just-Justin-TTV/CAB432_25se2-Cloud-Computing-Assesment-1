@@ -1,18 +1,24 @@
+# Standard library
+import os, json, re, threading
+
+# Django imports
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+
+# Local app imports
 from .models import Resume, JobApplication
 from .forms import ResumeUploadForm
-import os, json, re
-from django.conf import settings
+
+# Third-party imports
 from docx import Document
 from PyPDF2 import PdfReader
 import requests
-from django.views.decorators.csrf import csrf_exempt
-import threading
-import time
+
 
 # ===== Authentication Views =====
 def register_view(request):
@@ -76,13 +82,8 @@ def home(request):
 
 @login_required(login_url='/login/')
 def dashboard_view(request):
-    # Get all job applications, newest first
     job_applications = JobApplication.objects.select_related('user', 'resume').order_by('-created_at')
-
-    return render(request, 'dashboard.html', {
-        'job_applications': job_applications
-    })
-
+    return render(request, 'dashboard.html', {'job_applications': job_applications})
 
 
 # ===== Resume Helper =====
@@ -126,7 +127,6 @@ def view_job_application(request, job_app_id):
     return render(request, 'resume/view_job_application.html', {'job_app': job_app})
 
 
-
 @csrf_exempt
 @login_required(login_url='/login/')
 def match_resume_to_job(request, resume_id):
@@ -140,8 +140,6 @@ def match_resume_to_job(request, resume_id):
 
         try:
             resume_text = read_resume_text(resume.original_file.path)
-
-            # ===== Bigger, more detailed prompt =====
             prompt = f"""
             You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
             Consider every possible factor that could make a candidate suitable or unsuitable:
@@ -161,10 +159,8 @@ def match_resume_to_job(request, resume_id):
             - additional_scores (optional, multiple sub-scores like technical, soft skills, education)
             - feedback (detailed explanation why it scored that way)
             """
-
             ollama_host = os.environ.get("OLLAMA_HOST", "http://cab432-ollama:11434")
 
-            # ===== CPU-Intensive Parallel Threads =====
             results = []
             def ai_worker():
                 for _ in range(1):
@@ -178,8 +174,7 @@ def match_resume_to_job(request, resume_id):
                     results.append(data.get("response", ""))
 
             threads = []
-            num_threads = 1
-            for _ in range(num_threads):
+            for _ in range(1):
                 t = threading.Thread(target=ai_worker)
                 t.start()
                 threads.append(t)
@@ -187,7 +182,6 @@ def match_resume_to_job(request, resume_id):
             for t in threads:
                 t.join()
 
-            # Process combined results from threads
             ai_text = next((r for r in results if r), "")
             score, feedback = 50, ""
 
@@ -204,7 +198,6 @@ def match_resume_to_job(request, resume_id):
                 except Exception as e:
                     feedback = f"⚠ JSON parsing failed: {e}\n\nRaw output:\n{ai_text}"
 
-            # Save feedback to a file
             feedback_path = os.path.join(settings.MEDIA_ROOT, "feedback")
             os.makedirs(feedback_path, exist_ok=True)
             feedback_filename = f"{request.user.username}_resume_{resume.id}_feedback.txt"
@@ -234,8 +227,6 @@ def match_resume_to_job(request, resume_id):
             return redirect("match_resume_to_job", resume_id=resume.id)
 
     return render(request, "resume/match.html", {"resume": resume})
-
-
 
 
 @login_required(login_url='/login/')

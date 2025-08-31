@@ -5,12 +5,12 @@ from .models import Resume
 class ResumeUploadForm(forms.ModelForm):
     class Meta:
         model = Resume
-        fields = ['original_file']  # Correct field name
+        fields = ['original_file']
         widgets = {
             'original_file': forms.ClearableFileInput(attrs={'class': 'form-input'}),
         }
 
-# Optional: Form for job description input
+# Form for job description input
 class JobDescriptionForm(forms.Form):
     job_description = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 5, "placeholder": "Paste job description here"}),

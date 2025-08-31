@@ -23,6 +23,6 @@ urlpatterns = [
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),
 
-    # Required for django-browser-reload
+    # Django Browser Reload (development only)
     path("__reload__/", include("django_browser_reload.urls")),
 ]
