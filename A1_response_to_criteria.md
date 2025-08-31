@@ -1,4 +1,4 @@
-# Assignment 1 - REST API Project - Response to Criteria
+Assignment 1 - REST API Project - Response to Criteria
 
 ## Overview
 
