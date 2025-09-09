@@ -8,13 +8,25 @@ This repository contains the **CAB432 web application**, which uses Django, Mari
 
 ---
 
+# How to install virtual environment:
+
+cd "YOUR DIRECTORY e.g, C:\Users\Justin\Downloads\CAB432_25se2 Cloud Computing Assesment 1"
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+
+
+# Run the app, 
+docker compose up --build
+
+# You need Docker App Running, you need Ollama installed and you need to copy the file structure
+
 ## Git Clone
 
 ```bash
 git clone git@github.com:Just-Justin-TTV/CAB432_25se2-Cloud-Computing-Assesment-1.git
 cd CAB432_25se2-Cloud-Computing-Assesment-1
 
-# Docker commands
 
 # Build and start containers
 docker compose up --build
