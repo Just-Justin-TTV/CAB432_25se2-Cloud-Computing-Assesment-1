@@ -5,11 +5,13 @@ services:
     image: mariadb:11
     container_name: CAB432-db
     restart: always
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: CAB432db
-      MYSQL_USER: CAB432user
-      MYSQL_PASSWORD: CAB432pass
+      MYSQL_ROOT_PASSWORD: rootpass   # root still required for DB init
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
@@ -27,13 +29,14 @@ services:
       sh -c "ollama serve &
              until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
              ollama pull mistral &&
-             wait"  
+             wait"
 
   web:
     image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-web:latest
     container_name: CAB432-web
     command: >
       sh -c "python db.py &&
+             python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000 &
              until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
              python load_test.py > /code/load_test.log 2>&1"
@@ -41,17 +44,8 @@ services:
       - .:/code
     ports:
       - "8000:8000"
-    environment:
-      DB_HOST: db
-      DB_NAME: CAB432db
-      DB_USER: CAB432user
-      DB_PASSWORD: CAB432pass
-      OLLAMA_HOST: "http://cab432-ollama:11434"
-      TEST_USERNAME: "testuser"
-      TEST_PASSWORD: "password123"
-      LOAD_TEST_URL: "http://localhost:8000/match_resume_to_job/1"
-      LOAD_TEST_DURATION: "30"
-      LOAD_TEST_THREADS: "5"
+    env_file:
+      - .env
     depends_on:
       - db
       - ollama
