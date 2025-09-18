@@ -1,3 +1,5 @@
 Test user 'testuser' already exists
 Logged in as testuser successfully
-2025-09-09 06:09:34.264111 | Iteration 1 | Duration: 0.07s | CPU: 2.5% | Status: 200
+2025-09-18 13:41:24.211859 | Iteration 1 | Duration: 0.06s | CPU: 1.2% | Status: 200
+2025-09-18 13:41:27.233965 | Iteration 2 | Duration: 0.01s | CPU: 16.9% | Status: 200
+2025-09-18 13:41:30.262304 | Iteration 3 | Duration: 0.01s | CPU: 1.2% | Status: 200
