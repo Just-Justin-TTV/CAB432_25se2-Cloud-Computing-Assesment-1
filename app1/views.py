@@ -1,24 +1,21 @@
-# Standard library
 import os, json, re, threading
+from io import BytesIO
 
-# Django imports
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
+from django.core.files.base import ContentFile
+from django.contrib.auth.models import User
 
-# Local app imports
-from .models import Resume, JobApplication
-from .forms import ResumeUploadForm
-
-# Third-party imports
+from storages.backends.s3boto3 import S3Boto3Storage
 from docx import Document
 from PyPDF2 import PdfReader
 import requests
 
+from .models import Resume, JobApplication
+from .forms import ResumeUploadForm
 
 # ===== Authentication Views =====
 def register_view(request):
@@ -87,17 +84,16 @@ def dashboard_view(request):
 
 
 # ===== Resume Helper =====
-def read_resume_text(file_path):
-    ext = os.path.splitext(file_path)[1].lower()
+def read_resume_text(file_obj):
+    ext = os.path.splitext(file_obj.name)[1].lower()
     text = ""
     if ext == ".txt":
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            text = f.read()
+        text = file_obj.read().decode("utf-8", errors="ignore")
     elif ext == ".docx":
-        doc = Document(file_path)
+        doc = Document(file_obj)
         text = "\n".join([p.text for p in doc.paragraphs])
     elif ext == ".pdf":
-        reader = PdfReader(file_path)
+        reader = PdfReader(file_obj)
         for page in reader.pages:
             page_text = page.extract_text()
             if page_text:
@@ -113,7 +109,16 @@ def upload_resume(request):
         if form.is_valid():
             resume = form.save(commit=False)
             resume.user = request.user
+
+            s3_storage = S3Boto3Storage()
+            uploaded_file = request.FILES['original_file']
+
+            # Save directly to cab432-media/resumes/
+            resume_file_path = f"resumes/{uploaded_file.name}"
+            saved_resume_path = s3_storage.save(resume_file_path, ContentFile(uploaded_file.read()))
+            resume.original_file.name = saved_resume_path
             resume.save()
+
             return redirect('match_resume_to_job', resume_id=resume.id)
     else:
         form = ResumeUploadForm()
@@ -139,7 +144,12 @@ def match_resume_to_job(request, resume_id):
             return redirect("match_resume_to_job", resume_id=resume.id)
 
         try:
-            resume_text = read_resume_text(resume.original_file.path)
+            s3_storage = S3Boto3Storage()
+
+            # Open the resume using the exact stored path
+            with s3_storage.open(resume.original_file.name, 'rb') as f:
+                resume_text = read_resume_text(f)
+
             prompt = f"""
             You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
             Consider every possible factor that could make a candidate suitable or unsuitable:
@@ -198,15 +208,11 @@ def match_resume_to_job(request, resume_id):
                 except Exception as e:
                     feedback = f"⚠ JSON parsing failed: {e}\n\nRaw output:\n{ai_text}"
 
-            feedback_path = os.path.join(settings.MEDIA_ROOT, "feedback")
-            os.makedirs(feedback_path, exist_ok=True)
             feedback_filename = f"{request.user.username}_resume_{resume.id}_feedback.txt"
-            feedback_file_path = os.path.join(feedback_path, feedback_filename)
-            with open(feedback_file_path, "w", encoding="utf-8") as f:
-                if isinstance(feedback, dict):
-                    f.write(json.dumps(feedback, indent=4))
-                else:
-                    f.write(str(feedback))
+            saved_feedback_path = s3_storage.save(
+                f"feedback/{feedback_filename}",
+                ContentFile(feedback)
+            )
 
             job_app = JobApplication.objects.create(
                 user=request.user,

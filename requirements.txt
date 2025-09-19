@@ -57,3 +57,14 @@ requests
 psutil
 beautifulsoup4
 
+boto3
+django-storages
+Django>=5.1
+django-storages[boto3]
+boto3
+python-dotenv
+minio
+
+
+
+

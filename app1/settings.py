@@ -1,12 +1,18 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-j0_9nwv@qs^@w=g=2j#$ziphq)f(gwhg-v*og)&@)h7+y%0z*%'
-DEBUG = True
-ALLOWED_HOSTS = []
+# ===== Basic Settings =====
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-fallback-secret")
+DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+ALLOWED_HOSTS = ["*"]  # adjust for production
 
+# ===== Installed Apps =====
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -20,6 +26,7 @@ INSTALLED_APPS = [
     'django_browser_reload',
 ]
 
+# ===== Middleware =====
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -31,6 +38,7 @@ MIDDLEWARE = [
     'django_browser_reload.middleware.BrowserReloadMiddleware',
 ]
 
+# ===== URL & Templates =====
 ROOT_URLCONF = 'app1.urls'
 
 TEMPLATES = [
@@ -54,6 +62,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'app1.wsgi.application'
 
+# ===== Database =====
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -65,6 +74,7 @@ DATABASES = {
     }
 }
 
+# ===== Password Validators =====
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -74,17 +84,33 @@ AUTH_PASSWORD_VALIDATORS = [
 
 APPEND_SLASH = False
 
+# ===== Internationalization =====
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+# ===== Static files =====
+STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 TAILWIND_APP_NAME = 'theme'
 
-INTERNAL_IPS = [
-    "127.0.0.1",
-]
+INTERNAL_IPS = ["127.0.0.1"]
+
+# ===== S3 / MinIO Integration =====
+USE_S3 = os.environ.get("USE_S3", "False").lower() in ("true", "1", "yes")
+
+if USE_S3:
+    # django-storages settings
+    DEFAULT_FILE_STORAGE = "app1.storages_backends.MediaStorage"
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+    AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "cab432-media")
+    AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL", "http://minio:9000")
+    AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "us-east-1")
+    AWS_QUERYSTRING_AUTH = False  # optional for public URLs
+else:
+    MEDIA_URL = "/media/"
+    MEDIA_ROOT = os.path.join(BASE_DIR, "media")
