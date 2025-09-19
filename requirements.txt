@@ -56,4 +56,5 @@ requests
 # Library for interacting with the load testing tool
 psutil
 beautifulsoup4
+python-dotenv
 

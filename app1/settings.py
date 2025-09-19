@@ -3,9 +3,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-j0_9nwv@qs^@w=g=2j#$ziphq)f(gwhg-v*og)&@)h7+y%0z*%'
-DEBUG = True
-ALLOWED_HOSTS = []
+# Django settings from environment
+SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret")
+DEBUG = os.environ.get("DEBUG", "True") == "True"
+ALLOWED_HOSTS = ["*"]  # adjust for production
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -54,6 +55,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'app1.wsgi.application'
 
+# Database configuration from environment
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -85,6 +87,4 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 TAILWIND_APP_NAME = 'theme'
 
-INTERNAL_IPS = [
-    "127.0.0.1",
-]
+INTERNAL_IPS = ["127.0.0.1"]
