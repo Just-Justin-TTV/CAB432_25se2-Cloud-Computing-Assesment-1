@@ -1,6 +1,7 @@
 version: '3.9'
 
 services:
+  # Local MariaDB (comment out if using RDS)
   db:
     image: mariadb:11
     container_name: CAB432-db
@@ -17,8 +18,11 @@ services:
     volumes:
       - db_data:/var/lib/mysql
 
+  # Ollama service built locally
   ollama:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-ollama:latest
+    build:
+      context: ./ollama
+      dockerfile: Dockerfile
     container_name: cab432-ollama
     restart: always
     ports:
@@ -29,14 +33,16 @@ services:
       sh -c "ollama serve &
              until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
              ollama pull mistral &&
-             wait"
+             wait"  
 
+  # Django web service
   web:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-web:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: CAB432-web
     command: >
       sh -c "python db.py &&
-             python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000 &
              until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
              python load_test.py > /code/load_test.log 2>&1"
@@ -44,8 +50,17 @@ services:
       - .:/code
     ports:
       - "8000:8000"
-    env_file:
-      - .env
+    environment:
+      DB_HOST: db
+      DB_NAME: CAB432db
+      DB_USER: CAB432user
+      DB_PASSWORD: CAB432pass
+      OLLAMA_HOST: "http://cab432-ollama:11434"
+      TEST_USERNAME: "testuser"
+      TEST_PASSWORD: "password123"
+      LOAD_TEST_URL: "http://localhost:8000/match_resume_to_job/1"
+      LOAD_TEST_DURATION: "30"
+      LOAD_TEST_THREADS: "5"
     depends_on:
       - db
       - ollama
