@@ -14,11 +14,6 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python Dependencies
-COPY requirements.txt /code/
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
 # Copy Project Code
 COPY . /code/
 
