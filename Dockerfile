@@ -4,15 +4,20 @@ FROM python:3.12-slim
 # Set Working Directory
 WORKDIR /code
 
-# Install System Dependencies
+# Install System Dependencies (needed for mysqlclient, lxml, numpy, etc.)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
-    curl && \
-    rm -rf /var/lib/apt/lists/*
+    default-libmysqlclient-dev \
+    pkg-config \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python dependencies first for caching
+COPY requirements.txt /code/
 
 # Install Python Dependencies
-COPY requirements.txt /code/
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
