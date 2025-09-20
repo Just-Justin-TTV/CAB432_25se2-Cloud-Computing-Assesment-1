@@ -10,6 +10,8 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('register/', views.register_view, name='register'),
+    path('confirm/', views.confirm_view, name='confirm'),  # Add this
+    path('test-login/', views.test_login, name='test_login'),
 
     # Main pages
     path('', views.home, name='home'),

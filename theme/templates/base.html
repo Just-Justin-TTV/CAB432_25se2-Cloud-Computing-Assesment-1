@@ -34,7 +34,7 @@
     <div class="flex items-center max-w-7xl mx-auto space-x-4">
 
       <!-- Auth Links -->
-      {% if not request.user.is_authenticated %}
+      {% if not request.session.cognito_user %}
         <a href="{% url 'login' %}" 
            class="flex items-center px-6 h-10 border-l border-r border-gray-600 bg-[black] text-[white] font-semibold hover:bg-gray-900 transition">
           <span class="material-icons mr-2">account_circle</span>Sign In

@@ -41,6 +41,22 @@
 {% endblock %}
 
 {% block content %}
+{% if messages %}
+  <ul class="mb-4 space-y-2">
+    {% for message in messages %}
+      <li class="
+        {% if message.tags %}{{ message.tags }}{% endif %}
+        text-sm
+        px-3 py-2 rounded
+        {% if 'error' in message.tags %}bg-red-100 text-red-700{% endif %}
+        {% if 'success' in message.tags %}bg-green-100 text-green-700{% endif %}
+      ">
+        {{ message }}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
 <div class="min-h-screen w-full relative flex items-center justify-center px-4">
   <div class="animated-pattern"></div>
 

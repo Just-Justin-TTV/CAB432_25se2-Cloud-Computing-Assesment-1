@@ -1,14 +1,14 @@
 # Standard library
-import os, json, re, threading
+import os, json, re, threading, hmac, hashlib, base64
 
 # Django imports
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
-from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import logout as django_logout
+
 
 # Local app imports
 from .models import Resume, JobApplication
@@ -18,7 +18,102 @@ from .forms import ResumeUploadForm
 from docx import Document
 from PyPDF2 import PdfReader
 import requests
+import boto3
 
+from functools import wraps
+from django.shortcuts import redirect
+
+def get_cognito_username(request):
+    """
+    Returns the username stored in Cognito session.
+    Returns None if user is not logged in.
+    """
+    user = request.session.get('cognito_user')
+    return user.get('username') if user else None
+
+
+# Custom decorator for Cognito session-based authentication
+def cognito_login_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if 'cognito_user' not in request.session:
+            return redirect('login')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+# ===== AWS Cognito Configuration =====
+COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
+COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
+
+def secret_hash(username):
+    message = bytes(username + COGNITO_CLIENT_ID, 'utf-8')
+    key = bytes(COGNITO_CLIENT_SECRET, 'utf-8')
+    return base64.b64encode(hmac.new(key, message, digestmod=hashlib.sha256).digest()).decode()
+
+def cognito_authenticate(username, password):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    try:
+        response = client.initiate_auth(
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={
+                "USERNAME": username,
+                "PASSWORD": password,
+                "SECRET_HASH": secret_hash(username)
+            },
+            ClientId=COGNITO_CLIENT_ID
+        )
+        return response.get("AuthenticationResult")
+    except Exception as e:
+        print(f"Cognito authentication error: {e}")
+        return None
+
+def cognito_signup(username, password, email):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    try:
+        response = client.sign_up(
+            ClientId=COGNITO_CLIENT_ID,
+            Username=username,
+            Password=password,
+            SecretHash=secret_hash(username),
+            UserAttributes=[{"Name": "email", "Value": email}]
+        )
+        return response
+    except Exception as e:
+        print(f"Cognito sign-up error: {e}")
+        return None
+
+def cognito_confirm_signup(username, confirmation_code):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    try:
+        response = client.confirm_sign_up(
+            ClientId=COGNITO_CLIENT_ID,
+            Username=username,
+            ConfirmationCode=confirmation_code,
+            SecretHash=secret_hash(username)
+        )
+        return response
+    except Exception as e:
+        print(f"Cognito confirmation error: {e}")
+        return None
+
+@csrf_exempt
+def confirm_view(request):
+    if request.method == "POST":
+        username = request.POST.get("username")
+        confirmation_code = request.POST.get("confirmation_code")
+
+        response = cognito_confirm_signup(username, confirmation_code)
+        if response:
+            messages.success(request, "Confirmation successful! You can now log in.")
+            return redirect("login")
+        else:
+            messages.error(request, "Invalid code or confirmation failed.")
+
+    return render(request, "confirm.html")
+
+def test_login(request):
+    return render(request, "login.html", {"test": "ok"})
 
 # ===== Authentication Views =====
 def register_view(request):
@@ -36,52 +131,62 @@ def register_view(request):
             messages.error(request, "Passwords do not match.")
             return render(request, 'register.html')
 
-        if User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists.")
-            return render(request, 'register.html')
-        if User.objects.filter(email=email).exists():
-            messages.error(request, "Email already exists.")
+        # Cognito sign-up
+        signup_response = cognito_signup(username, password1, email)
+        if not signup_response:
+            messages.error(request, "Registration failed. Try again.")
             return render(request, 'register.html')
 
-        user = User.objects.create_user(username=username, email=email, password=password1)
-        login(request, user)
-        messages.success(request, "Registration successful!")
-        return redirect('home')
+        
+        messages.success(request, "Registration successful! Check your email to confirm.")
+        return redirect('confirm')
 
     return render(request, 'register.html')
 
 
 def login_view(request):
-    if request.user.is_authenticated:
-        return redirect('home') 
-
+    # DO NOT redirect here on GET to avoid redirect loop
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
-        if user:
-            login(request, user)
+
+        tokens = cognito_authenticate(username, password)
+        if tokens:
+            # Save JWTs in session
+            request.session['cognito_user'] = {
+                "username": username,
+                "id_token": tokens.get("IdToken"),
+                "access_token": tokens.get("AccessToken"),
+                "refresh_token": tokens.get("RefreshToken")
+            }
+            messages.success(request, "Login successful!")
             return redirect('home')
         else:
             messages.error(request, "Invalid username or password.")
+
     return render(request, 'login.html')
+
 
 
 @login_required(login_url='/login/')
 def logout_view(request):
-    logout(request)
+    # Remove Cognito session
+    request.session.pop('cognito_user', None)
+    request.session.flush()
     messages.success(request, "Logged out successfully.")
     return redirect('login')
 
 
+
 # ===== Pages =====
-@login_required(login_url='/login/')
+@cognito_login_required
 def home(request):
     return render(request, 'home.html')
 
 
-@login_required(login_url='/login/')
+@cognito_login_required
 def dashboard_view(request):
+    username = get_cognito_username(request)
     job_applications = JobApplication.objects.select_related('user', 'resume').order_by('-created_at')
     return render(request, 'dashboard.html', {'job_applications': job_applications})
 
@@ -106,8 +211,9 @@ def read_resume_text(file_path):
 
 
 # ===== Resume Upload =====
-@login_required(login_url='/login/')
+@cognito_login_required
 def upload_resume(request):
+    username = get_cognito_username(request)
     if request.method == "POST":
         form = ResumeUploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -121,15 +227,17 @@ def upload_resume(request):
 
 
 # ===== View Job Application =====
-@login_required(login_url='/login/')
+@cognito_login_required
 def view_job_application(request, job_app_id):
+    username = get_cognito_username(request)
     job_app = get_object_or_404(JobApplication, id=job_app_id)
     return render(request, 'resume/view_job_application.html', {'job_app': job_app})
 
 
 @csrf_exempt
-@login_required(login_url='/login/')
+@cognito_login_required
 def match_resume_to_job(request, resume_id):
+    username = get_cognito_username(request)
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
 
     if request.method == "POST":
@@ -229,7 +337,7 @@ def match_resume_to_job(request, resume_id):
     return render(request, "resume/match.html", {"resume": resume})
 
 
-@login_required(login_url='/login/')
+@cognito_login_required
 def job_application_detail(request, pk):
     job_app = get_object_or_404(JobApplication, pk=pk, user=request.user)
     return render(request, "resume/job_application_detail.html", {"job_app": job_app})
