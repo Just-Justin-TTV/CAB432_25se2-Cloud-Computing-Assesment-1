@@ -18,6 +18,7 @@ aws ssm start-session --target i-0c32d69a0e81389c4 --document-name AWS-StartPort
 
 # On EC2 instance 
 # SSH/SSM session into EC2
+sudo su - ubuntu
 cd /home/ubuntu/projects/CAB432_25se2-Cloud-Computing-Assesment-1
 sudo docker-compose up -d
 
