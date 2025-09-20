@@ -29,3 +29,10 @@ ENV PYTHONUNBUFFERED=1
 
 # Default Command
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# At the end of the Dockerfile
+COPY entrypoint.sh /code/entrypoint.sh
+RUN chmod +x /code/entrypoint.sh
+
+ENTRYPOINT ["/code/entrypoint.sh"]
+
