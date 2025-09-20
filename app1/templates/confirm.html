@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block head %}
+<style>
+@keyframes Animation { 
+    0%{background-position:10% 0%}
+    50%{background-position:91% 100%}
+    100%{background-position:10% 0%}
+}
+.animated-pattern {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    background-image:
+      linear-gradient(135deg, #15b97b 0%, #00a388 20%, #008d8c 40%, #007584 60%, #195e72 80%, #2f4858 100%),
+      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="8" fill="rgba(255,255,255,0.2)" /></svg>');
+    background-repeat: no-repeat, repeat;
+    background-size: 200% 200%;
+    animation: Animation 10s ease-in-out infinite;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex justify-center items-center px-4">
+  <div class="animated-pattern"></div>
+
+  <div class="bg-white bg-opacity-10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl w-full max-w-md transform hover:scale-105 transition-all duration-300 z-10">
+
+    <h2 class="text-4xl font-extrabold text-white mb-2 text-center">Confirm Your Account</h2>
+    <p class="text-sm text-white/80 mb-6 text-center">
+      Enter the verification code sent to your email
+    </p>
+
+    <form method="POST" class="space-y-4">
+      {% csrf_token %}
+      {% if messages %}
+  <ul class="mb-4 space-y-2">
+    {% for message in messages %}
+      <li class="
+        {% if message.tags %}{{ message.tags }}{% endif %}
+        text-sm
+        px-3 py-2 rounded
+        {% if 'error' in message.tags %}bg-red-100 text-red-700{% endif %}
+        {% if 'success' in message.tags %}bg-green-100 text-green-700{% endif %}
+      ">
+        {{ message }}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+
+      <input name="username" placeholder="Username" required
+             value="{{ request.POST.username|default:'' }}"
+             class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white/60 focus:bg-opacity-30 focus:ring-2 focus:ring-emerald-300" />
+
+      <input name="confirmation_code" placeholder="Confirmation Code" required
+             value="{{ request.POST.confirmation_code|default:'' }}"
+             class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white/60 focus:bg-opacity-30 focus:ring-2 focus:ring-emerald-300" />
+
+      <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-400 text-white font-bold rounded-lg hover:opacity-90">
+        Confirm Account
+      </button>
+    </form>
+
+    <p class="text-white/90 text-center mt-6">
+      Didn't receive a code? <a href="{% url 'register' %}" class="font-bold hover:underline text-white">Register again</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

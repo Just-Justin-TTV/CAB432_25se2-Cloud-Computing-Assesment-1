@@ -58,3 +58,8 @@ psutil
 beautifulsoup4
 python-dotenv
 
+# AWS Cognito / boto3
+boto3==1.26.0
+botocore==1.29.0
+python-dotenv
+
