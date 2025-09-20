@@ -57,6 +57,8 @@ requests
 psutil
 beautifulsoup4
 python-dotenv
+psycopg2-binary>=2.9
+
 
 # AWS Cognito / boto3
 boto3==1.26.0

@@ -14,7 +14,7 @@ load_test.log
 load_test_cpu.log
 
 # Docker
-*.env
+
 *.dockerignore
 
 # OS files
