@@ -57,3 +57,7 @@ requests
 psutil
 beautifulsoup4
 
+# AWS Cognito / boto3
+boto3==1.26.0
+botocore==1.29.0
+
