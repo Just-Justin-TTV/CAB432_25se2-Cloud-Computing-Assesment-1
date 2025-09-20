@@ -6,10 +6,8 @@ WORKDIR /code
 
 # Install System Dependencies
 RUN apt-get update && apt-get install -y \
-    default-libmysqlclient-dev \
     gcc \
-    pkg-config \
-    libmariadb-dev \
+    libpq-dev \
     curl && \
     rm -rf /var/lib/apt/lists/*
 

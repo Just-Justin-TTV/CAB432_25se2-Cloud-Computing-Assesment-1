@@ -26,7 +26,7 @@ services:
     container_name: CAB432-web
     command: >
       sh -c "python db.py &&
-             python manage.py runserver 0.0.0.0:8000 & 
+             python manage.py runserver 0.0.0.0:8000 &
              until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
              python load_test.py > /code/load_test.log 2>&1"
     volumes:
