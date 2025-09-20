@@ -58,14 +58,16 @@ WSGI_APPLICATION = 'app1.wsgi.application'
 # Database configuration from environment
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": os.environ.get("DB_NAME", "CAB432db"),
-        "USER": os.environ.get("DB_USER", "CAB432user"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "CAB432pass"),
-        "HOST": os.environ.get("DB_HOST", "db"),
-        "PORT": os.environ.get("DB_PORT", "3306"),
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "cohort_2025"),
+        "USER": os.environ.get("DB_USER", "s381"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "hQ5o87dNk9mx"),
+        "HOST": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
+        "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "require")},
     }
 }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},

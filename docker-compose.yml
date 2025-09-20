@@ -1,24 +1,7 @@
 version: '3.9'
 
 services:
-  # Local MariaDB (comment out if using RDS)
-  db:
-    image: mariadb:11
-    container_name: CAB432-db
-    restart: always
-    env_file:
-      - .env
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass   # root still required for DB init
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "3306:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-
-  # Ollama service built locally
+  # Ollama service
   ollama:
     build:
       context: ./ollama
@@ -33,7 +16,7 @@ services:
       sh -c "ollama serve &
              until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
              ollama pull mistral &&
-             wait"  
+             wait"
 
   # Django web service
   web:
@@ -43,7 +26,7 @@ services:
     container_name: CAB432-web
     command: >
       sh -c "python db.py &&
-             python manage.py runserver 0.0.0.0:8000 &
+             python manage.py runserver 0.0.0.0:8000 & 
              until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
              python load_test.py > /code/load_test.log 2>&1"
     volumes:
@@ -51,10 +34,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DB_HOST: db
-      DB_NAME: CAB432db
-      DB_USER: CAB432user
-      DB_PASSWORD: CAB432pass
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${DB_PORT}
+      DB_SSLMODE: ${DB_SSLMODE}
       OLLAMA_HOST: "http://cab432-ollama:11434"
       TEST_USERNAME: "testuser"
       TEST_PASSWORD: "password123"
@@ -62,9 +47,7 @@ services:
       LOAD_TEST_DURATION: "30"
       LOAD_TEST_THREADS: "5"
     depends_on:
-      - db
       - ollama
 
 volumes:
-  db_data:
   ollama_data:
