@@ -1,10 +1,10 @@
-# Base Image 
+# Base image
 FROM python:3.12-slim
 
-# Set Working Directory
+# Set working directory
 WORKDIR /code
 
-# Install System Dependencies (needed for mysqlclient, lxml, numpy, etc.)
+# Install system dependencies needed for MySQL, lxml, etc.
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
@@ -15,22 +15,21 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python dependencies first for caching
+# Copy Python dependencies first (caching layer)
 COPY requirements.txt /code/
 
-# Install Python Dependencies
+# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy Project Code
+# Copy the project code
 COPY . /code/
 
-# Environment Configuration
-ENV PYTHONUNBUFFERED=1
-
-# Copy entrypoint script
-COPY entrypoint.sh /code/entrypoint.sh
+# Make entrypoint executable
 RUN chmod +x /code/entrypoint.sh
 
-# Use entrypoint to handle migrations and runserver
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Use entrypoint script
 ENTRYPOINT ["/code/entrypoint.sh"]

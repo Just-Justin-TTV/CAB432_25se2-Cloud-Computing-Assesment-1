@@ -24,13 +24,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: CAB432-web
-    command: >
-      sh -c "python db.py &&
-             python manage.py runserver 0.0.0.0:8000 &
-             until curl -s http://localhost:8000 >/dev/null; do sleep 2; done &&
-             python load_test.py > /code/load_test.log 2>&1"
-    volumes:
-      - .:/code
+    depends_on:
+      - ollama
     ports:
       - "8000:8000"
     environment:
@@ -46,8 +41,8 @@ services:
       LOAD_TEST_URL: "http://localhost:8000/match_resume_to_job/1"
       LOAD_TEST_DURATION: "30"
       LOAD_TEST_THREADS: "5"
-    depends_on:
-      - ollama
+    volumes:
+      - .:/code
 
 volumes:
   ollama_data:
