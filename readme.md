@@ -7,6 +7,23 @@
 This repository contains the **CAB432 web application**, which uses Django, MariaDB, and Ollama AI for resume-job matching.
 
 ---
+# Clone repo
+git clone git@github.com:Just-Justin-TTV/CAB432_25se2-Cloud-Computing-Assesment-1.git
+cd CAB432_25se2-Cloud-Computing-Assesment-1
+
+
+# EC2
+# Open a terminal on your local PC
+aws ssm start-session --target i-0c32d69a0e81389c4 --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"portNumber\":[\"8000\"],\"localPortNumber\":[\"8000\"]}"
+
+# On EC2 instance 
+# SSH/SSM session into EC2
+sudo su - ubuntu
+cd /home/ubuntu/projects/CAB432_25se2-Cloud-Computing-Assesment-1
+sudo docker-compose up -d
+
+
+
 
 # How to install virtual environment:
 

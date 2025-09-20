@@ -1,22 +1,28 @@
 version: '3.9'
 
 services:
+  # Local MariaDB (comment out if using RDS)
   db:
     image: mariadb:11
     container_name: CAB432-db
     restart: always
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: CAB432db
-      MYSQL_USER: CAB432user
-      MYSQL_PASSWORD: CAB432pass
+      MYSQL_ROOT_PASSWORD: rootpass   # root still required for DB init
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
 
+  # Ollama service built locally
   ollama:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-ollama:latest
+    build:
+      context: ./ollama
+      dockerfile: Dockerfile
     container_name: cab432-ollama
     restart: always
     ports:
@@ -29,8 +35,11 @@ services:
              ollama pull mistral &&
              wait"  
 
+  # Django web service
   web:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/cab432-web:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: CAB432-web
     command: >
       sh -c "python db.py &&
