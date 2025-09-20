@@ -56,6 +56,7 @@ requests
 # Library for interacting with the load testing tool
 psutil
 beautifulsoup4
+python-dotenv
 
 # AWS Cognito / boto3
 boto3==1.26.0
