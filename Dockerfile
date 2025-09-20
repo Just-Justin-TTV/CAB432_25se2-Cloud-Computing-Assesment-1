@@ -1,4 +1,4 @@
-# Base Image
+# Base Image 
 FROM python:3.12-slim
 
 # Set Working Directory
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     build-essential \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python dependencies first for caching
@@ -27,12 +28,9 @@ COPY . /code/
 # Environment Configuration
 ENV PYTHONUNBUFFERED=1
 
-# Default Command
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
-
-# At the end of the Dockerfile
+# Copy entrypoint script
 COPY entrypoint.sh /code/entrypoint.sh
 RUN chmod +x /code/entrypoint.sh
 
+# Use entrypoint to handle migrations and runserver
 ENTRYPOINT ["/code/entrypoint.sh"]
-
