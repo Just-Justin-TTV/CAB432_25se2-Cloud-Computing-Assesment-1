@@ -30,7 +30,7 @@ services:
       - "8000:8000"
     command: >
       sh -c "python manage.py migrate &&
-      python manage.py runserver 0.0.0.0:8000"
+             python manage.py runserver 0.0.0.0:8000"
     environment:
       DB_HOST: ${DB_HOST}
       DB_NAME: ${DB_NAME}
@@ -47,8 +47,13 @@ services:
       COGNITO_CLIENT_ID: 5dmsjn9reflk2l2auq48qr9r1r
       COGNITO_CLIENT_SECRET: vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt
       COGNITO_REGION: ap-southeast-2
+      USE_S3: "True"
+      AWS_PROFILE: "CAB432-STUDENT"
+      AWS_REGION: "ap-southeast-2"
+      AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
     volumes:
       - .:/code
+      - C:\Users\Justin\.aws:/root/.aws:ro  # Mount local AWS SSO credentials
 
 volumes:
   ollama_data:

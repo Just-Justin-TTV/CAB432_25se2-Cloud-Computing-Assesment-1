@@ -68,7 +68,6 @@ DATABASES = {
     }
 }
 
-
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -88,5 +87,21 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 TAILWIND_APP_NAME = 'theme'
-
 INTERNAL_IPS = ["127.0.0.1"]
+
+# === AWS S3 (SSO) ===
+USE_S3 = os.environ.get("USE_S3", "False") == "True"
+AWS_PROFILE = os.environ.get("AWS_PROFILE", "CAB432-STUDENT")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
+AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "justinsinghatwalbucket")
+AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL")  # leave empty for real AWS
+
+if USE_S3:
+    import boto3
+
+    def get_s3_client():
+        """
+        Creates a boto3 S3 client using the SSO profile.
+        """
+        session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
+        return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)

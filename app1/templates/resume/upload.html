@@ -1,10 +1,9 @@
-{% extends "base.html" %}
-
-{% block content %}
-<h1>Upload Resume</h1>
-<form method="post" enctype="multipart/form-data">
+{% if user_logged_in %}
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Upload and Continue</button>
-</form>
-{% endblock %}
+    <input type="file" name="resume">
+    <button type="submit">Upload Resume</button>
+  </form>
+{% else %}
+  <p>Please log in to upload a resume.</p>
+{% endif %}
