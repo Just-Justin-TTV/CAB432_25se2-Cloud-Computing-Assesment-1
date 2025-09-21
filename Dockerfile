@@ -25,11 +25,6 @@ RUN pip install --upgrade pip && \
 # Copy the project code
 COPY . /code/
 
-# Make entrypoint executable
-RUN chmod +x /code/entrypoint.sh
-
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Use entrypoint script
-ENTRYPOINT ["/code/entrypoint.sh"]
