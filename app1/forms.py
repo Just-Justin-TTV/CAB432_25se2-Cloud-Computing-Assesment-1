@@ -1,14 +1,17 @@
 from django import forms
 from .models import Resume
 
-# Form for uploading a resume file
+# Form for uploading a resume file (S3 only)
 class ResumeUploadForm(forms.ModelForm):
+    resume_file = forms.FileField(
+        required=True,
+        widget=forms.ClearableFileInput(attrs={'class': 'form-input'}),
+        label="Upload Resume"
+    )
+
     class Meta:
         model = Resume
-        fields = ['original_file']
-        widgets = {
-            'original_file': forms.ClearableFileInput(attrs={'class': 'form-input'}),
-        }
+        fields = []  # No local file fields are used
 
 # Form for job description input
 class JobDescriptionForm(forms.Form):
