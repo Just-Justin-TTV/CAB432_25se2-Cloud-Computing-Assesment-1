@@ -44,11 +44,10 @@ services:
       LOAD_TEST_URL: "http://localhost:8000/match_resume_to_job/1"
       LOAD_TEST_DURATION: "30"
       LOAD_TEST_THREADS: "5"
-      COGNITO_CLIENT_ID: 5dmsjn9reflk2l2auq48qr9r1r
-      COGNITO_CLIENT_SECRET: vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt
       COGNITO_REGION: ap-southeast-2
     volumes:
       - .:/code
+      - ${USERPROFILE}/.aws:/root/.aws:ro
 
 volumes:
   ollama_data:

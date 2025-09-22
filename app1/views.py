@@ -13,6 +13,7 @@ from django.contrib.auth import logout as django_logout
 # Local app imports
 from .models import Resume, JobApplication
 from .forms import ResumeUploadForm
+from .aws_param_store import get_parameter
 
 # Third-party imports
 from docx import Document
@@ -42,8 +43,12 @@ def cognito_login_required(view_func):
     return wrapper
 
 # ===== AWS Cognito Configuration =====
-COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
-COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
+COGNITO_CLIENT_ID = get_parameter("/n12008192/assessment2/COGNITO_CLIENT_ID") \
+                    or os.environ.get("COGNITO_CLIENT_ID", "")
+
+COGNITO_CLIENT_SECRET = get_parameter("/n12008192/assessment2/COGNITO_CLIENT_SECRET") \
+                        or os.environ.get("COGNITO_CLIENT_SECRET", "")
+
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
 
 def secret_hash(username):
