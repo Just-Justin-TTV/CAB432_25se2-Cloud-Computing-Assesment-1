@@ -15,6 +15,7 @@ urlpatterns = [
     # Home / Dashboard
     path('', views.home, name='home'),
     path('dashboard/', views.dashboard_view, name='dashboard'),
+    path('admin-dashboard/', views.admin_dashboard_view, name='admin_dashboard'),
 
     # Resume
     path('resume/upload/', views.upload_resume, name='upload_resume'),

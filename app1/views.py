@@ -11,6 +11,21 @@ from django.contrib.auth import get_user_model
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_exempt
+import logging
+from django.contrib.auth import login as django_login
+from .models import JobApplication
+import boto3
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.contrib.auth import login, get_user_model
+from django.views.decorators.csrf import csrf_exempt
+import json
+from uuid import uuid4
+from django.http import JsonResponse
+
+
+
+logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
 # ===== Cognito / AWS Setup =====
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
@@ -18,36 +33,79 @@ COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 
+User = get_user_model()
 
 def secret_hash(username):
+    if not COGNITO_CLIENT_SECRET:
+        return None
     msg = username + COGNITO_CLIENT_ID
     dig = hmac.new(
         str(COGNITO_CLIENT_SECRET).encode("utf-8"),
         msg.encode("utf-8"),
         digestmod="sha256"
     ).digest()
-    return base64.b64encode(dig).decode()
+    sh = base64.b64encode(dig).decode()
+    logging.debug(f"Secret hash for {username}: {sh}")
+    return sh
+
+def is_cognito_admin(username):
+    """
+    Checks if a Cognito user is in the 'Admin' group.
+    """
+    if not username:
+        return False
+
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    try:
+        response = client.admin_list_groups_for_user(
+            Username=username,
+            UserPoolId=COGNITO_USER_POOL_ID
+        )
+        groups = [g['GroupName'] for g in response.get('Groups', [])]
+        return "Admin" in groups
+    except client.exceptions.UserNotFoundException:
+        return False
+    except Exception as e:
+        print(f"[ERROR] Failed to check admin status for {username}: {e}")
+        return False
 
 
 def cognito_authenticate(username, password):
+    """
+    Authenticate a user with Cognito using USER_PASSWORD_AUTH.
+    Returns AuthenticationResult dict on success, None on failure.
+    """
+    logging.debug(f"Attempting login for user: {username}")
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    auth_params = {
-        "USERNAME": username,
-        "PASSWORD": password
-    }
+    auth_params = {"USERNAME": username, "PASSWORD": password}
     sh = secret_hash(username)
     if sh:
         auth_params["SECRET_HASH"] = sh
+
     try:
         response = client.initiate_auth(
             AuthFlow="USER_PASSWORD_AUTH",
             AuthParameters=auth_params,
             ClientId=COGNITO_CLIENT_ID
         )
-        return response.get("AuthenticationResult")
+        logging.debug(f"Cognito full response: {response}")
+
+        if "ChallengeName" in response:
+            logging.warning(f"Login challenge for {username}: {response['ChallengeName']}")
+            # You may handle NEW_PASSWORD_REQUIRED or other challenges here
+            return None
+
+        auth_result = response.get("AuthenticationResult")
+        logging.debug(f"Auth result: {auth_result}")
+        return auth_result
+
+    except client.exceptions.NotAuthorizedException as e:
+        logging.error(f"Login failed (NotAuthorizedException) for {username}: {e}")
+    except client.exceptions.UserNotFoundException as e:
+        logging.error(f"Login failed (UserNotFoundException) for {username}: {e}")
     except Exception as e:
-        print(f"[ERROR] Cognito authentication failed: {e}")
-        return None
+        logging.error(f"Login failed (Other) for {username}: {e}")
+    return None
 
 def cognito_signup(username, password, email):
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
@@ -96,6 +154,9 @@ def cognito_send_reset_code(username):
         return None
 
 def cognito_confirm_reset(username, code, new_password):
+    """
+    Confirm password reset in Cognito and optionally login the user.
+    """
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
     kwargs = {
         "ClientId": COGNITO_CLIENT_ID,
@@ -107,9 +168,12 @@ def cognito_confirm_reset(username, code, new_password):
     if sh:
         kwargs["SecretHash"] = sh
     try:
-        return client.confirm_forgot_password(**kwargs)
+        client.confirm_forgot_password(**kwargs)
+        logging.info(f"Password reset confirmed for {username}")
+        # Try auto-login after reset
+        return cognito_authenticate(username, new_password)
     except Exception as e:
-        print(f"[ERROR] Confirm reset failed: {e}")
+        logging.error(f"Confirm reset failed for {username}: {e}")
         return None
 
 # ===== Cognito / Django User Helper =====
@@ -130,6 +194,45 @@ def get_django_user_from_cognito(request):
 def get_cognito_username(request):
     user = request.session.get('cognito_user')
     return user.get('username') if user else None
+
+def sync_cognito_user_to_django(request):
+    """
+    Sync the Cognito user session to a Django User and log them in.
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    cognito_user = request.session.get("cognito_user")
+    if not cognito_user:
+        logging.debug("No cognito_user in session.")
+        return None
+
+    username = cognito_user.get("username")
+    logging.debug(f"Syncing Cognito user: {username}")
+
+    # Get Cognito groups
+    client = boto3.client('cognito-idp', region_name=COGNITO_REGION)
+    try:
+        response = client.admin_list_groups_for_user(
+            Username=username,
+            UserPoolId=COGNITO_USER_POOL_ID
+        )
+        groups = [g['GroupName'] for g in response.get("Groups", [])]
+        logging.debug(f"Cognito groups for {username}: {groups}")
+    except Exception as e:
+        logging.error(f"Failed to fetch Cognito groups for {username}: {e}")
+        groups = []
+
+    # Create or update Django user
+    user, created = User.objects.get_or_create(username=username)
+    user.is_staff = 'admin' in [g.lower() for g in groups]
+    user.is_superuser = 'admin' in [g.lower() for g in groups]
+    user.save()
+    logging.debug(f"Django user flags for {username}: is_staff={user.is_staff}, is_superuser={user.is_superuser}")
+
+    # Log user in
+    login(request, user)
+    logging.info(f"User {username} synced and logged in. Created new Django user? {created}")
+    return user
 
 
 # ===== Decorators =====
@@ -214,55 +317,48 @@ def confirm_view(request):
 
 @csrf_exempt
 def login_view(request):
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
 
-    if request.method == "POST":
-        username = request.POST.get("username")
-        password = request.POST.get("password")
-        if username and password:
-            # Attempt login
-            user = cognito_authenticate(username, password)
-            if user:
-                request.session['cognito_user'] = {
-                    'username': username,
-                    'id_token': user.get('IdToken')
+        client = boto3.client('cognito-idp', region_name=COGNITO_REGION)
+
+        try:
+            # Authenticate user with Cognito
+            response = client.initiate_auth(
+                ClientId=COGNITO_CLIENT_ID,
+                AuthFlow='USER_PASSWORD_AUTH',
+                AuthParameters={
+                    'USERNAME': username,
+                    'PASSWORD': password
                 }
-                messages.success(request, "Login successful!")
-                return redirect("home")
-            else:
-                messages.error(request, "Invalid username or password.")
-        elif "send_code" in request.POST:
-            # Forgot password: send reset code
-            username = request.POST.get("reset_username")
-            if username:
-                result = cognito_send_reset_code(username)
-                if result:
-                    messages.success(request, "Check your email for the reset code.")
-                else:
-                    messages.error(request, "Failed to send reset code.")
-        elif "confirm_reset" in request.POST:
-            # Confirm reset + login
-            username = request.POST.get("reset_username")
-            code = request.POST.get("reset_code")
-            new_password = request.POST.get("new_password")
-            if all([username, code, new_password]):
-                result = cognito_confirm_reset(username, code, new_password)
-                if result:
-                    user = cognito_authenticate(username, new_password)
-                    if user:
-                        request.session['cognito_user'] = {
-                            'username': username,
-                            'id_token': user.get('IdToken'),
-                            "access_token": user["AccessToken"],
-                            "refresh_token": user.get("RefreshToken"),
-                        }
-                        messages.success(request, "Password reset successful. Logged in!")
-                        return redirect("home")
-                    else:
-                        messages.error(request, "Reset succeeded, but login failed.")
-                else:
-                    messages.error(request, "Password reset failed.")
-    return render(request, "login.html")
+            )
+
+            # If authentication succeeds
+            auth_result = response.get('AuthenticationResult')
+            if auth_result:
+                access_token = auth_result.get('AccessToken')
+                id_token = auth_result.get('IdToken')
+                refresh_token = auth_result.get('RefreshToken')
+
+                # Get or create a corresponding Django user
+                user, created = User.objects.get_or_create(username=username)
+                # Optionally, you can update user details here from Cognito claims
+
+                # Log the user in (Django session)
+                login(request, user)
+
+                messages.success(request, f'Welcome, {username}!')
+                return redirect('dashboard')  # Replace with your dashboard URL
+
+        except client.exceptions.NotAuthorizedException:
+            messages.error(request, 'Invalid username or password.')
+        except client.exceptions.UserNotFoundException:
+            messages.error(request, 'User does not exist.')
+        except Exception as e:
+            messages.error(request, f'Login error: {str(e)}')
+
+    return render(request, 'login.html')
 
 
 
@@ -315,26 +411,50 @@ def logout_view(request):
 # ===== Dashboard / Admin using Cognito only =====
 @cognito_login_required
 def dashboard_view(request):
-    apps = JobApplication.objects.all()
     username = get_cognito_username(request)
-    is_admin = is_cognito_admin(username)  # updated function
-    return render(request, 'dashboard.html', {
-        'job_applications': apps,
-        'is_admin': is_admin
-    })
+    logging.debug(f"Dashboard accessed by username={username}")
+    client = boto3.client('cognito-idp', region_name=COGNITO_REGION)
 
+    try:
+        response = client.admin_list_groups_for_user(
+            Username=username,
+            UserPoolId=COGNITO_USER_POOL_ID
+        )
+        groups = [g['GroupName'] for g in response.get('Groups', [])]
+        is_admin = 'admin' in [g.lower() for g in groups]
+        logging.debug(f"Cognito groups: {groups}, is_admin={is_admin}")
+    except Exception as e:
+        logging.error(f"Failed to fetch groups for {username}: {e}")
+        is_admin = False
 
-@cognito_group_required("Admin")  # only users in Admin group
-def admin_dashboard_view(request):
     django_user = get_django_user_from_cognito(request)
+    logging.debug(f"Django user: {django_user}")
+    job_applications = JobApplication.objects.filter(user=django_user).select_related('resume') if django_user else []
 
-    resumes = Resume.objects.select_related('user').order_by('-created_at')
-    job_apps = JobApplication.objects.select_related('user', 'resume').order_by('-created_at')
-
-    return render(request, "admin_dashboard.html", {
-        "resumes": resumes,
-        "job_applications": job_apps
+    return render(request, 'dashboard.html', {
+        'is_admin': is_admin,
+        'job_applications': job_applications,
     })
+
+
+
+
+@cognito_group_required("admin")  # match the exact Cognito group name
+def admin_dashboard_view(request):
+    logging.debug(f"Accessing admin dashboard: request.user={request.user}")
+    if not request.user.is_authenticated:
+        logging.warning("User not authenticated.")
+        return redirect('login')
+
+    logging.debug(f"User flags: is_staff={request.user.is_staff}, is_superuser={request.user.is_superuser}")
+    if not request.user.is_staff:
+        logging.warning("User is not staff. Redirecting to login.")
+        return redirect('login')
+
+    return render(request, 'admin_dashboard.html')
+
+
+
 
 # ===== Resume Helpers =====
 def read_resume_text(resume):
