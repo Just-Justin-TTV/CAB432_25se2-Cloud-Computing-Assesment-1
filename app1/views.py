@@ -33,6 +33,10 @@ COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 
+AWS_PROFILE = "CAB432-STUDENT"
+AWS_REGION = "ap-southeast-2"
+AWS_BUCKET = "justinsinghatwalbucket"
+
 User = get_user_model()
 
 def secret_hash(username):
