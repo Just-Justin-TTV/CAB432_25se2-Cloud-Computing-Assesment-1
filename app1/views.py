@@ -324,18 +324,18 @@ def match_resume_to_job(request, resume_id):
             key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
             feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
 
-            JobApplication.objects.create(
-                user=django_user,
-                resume=resume,
-                job_description=job_position,
-                ai_model="mistral",
-                score=float(score)/100.0,
-                status="completed",
-                feedback=feedback,
-                feedback_s3_url=feedback_s3_url
-            )
+            job_app = JobApplication.objects.create(
+            user=django_user,
+            resume=resume,
+            job_description=job_position,
+            ai_model="mistral",
+            score=float(score)/100.0,
+            status="completed",
+            feedback=feedback,
+            feedback_s3_url=feedback_s3_url
+        )
             messages.success(request, f"Match analysis complete! Score: {score}")
-            return redirect("view_job_application", job_app_id=resume.id)
+            return redirect("view_job_application", job_app_id=job_app.id)
         except Exception as e:
             print(f"[ERROR] AI processing failed: {e}")
             messages.error(request, f"AI processing failed: {e}")

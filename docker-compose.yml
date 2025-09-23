@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   ollama:
     build:
@@ -11,11 +9,9 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    command: >
-      sh -c "ollama serve &
-             until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
-             ollama pull mistral &&
-             wait"
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+    command: sh -c "ollama serve"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 5s
@@ -43,6 +39,7 @@ services:
       AWS_PROFILE: "CAB432-STUDENT"
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
+      OLLAMA_URL: "http://ollama:11434"  # <-- added for web container to reach Ollama
     volumes:
       - .:/code
       - C:\Users\Justin\.aws:/root/.aws:ro
