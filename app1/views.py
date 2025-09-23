@@ -1,50 +1,46 @@
-import os, json, re, io, base64, hmac
+import os
+import base64
+import hmac
 from functools import wraps
-from uuid import uuid4
-import time
 
 import boto3
-from botocore.exceptions import ClientError
-import requests
-from docx import Document
-from PyPDF2 import PdfReader
-
-from django.shortcuts import render, redirect, get_object_or_404
+import jwt
+from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from django.conf import settings
+from django.views.decorators.cache import never_cache
+from django.views.decorators.clickjacking import xframe_options_exempt
 
-from .models import Resume, JobApplication
-from . import s3_utils
-
-# ===== AWS / S3 Setup =====
-AWS_PROFILE = "CAB432-STUDENT"
-AWS_REGION = "ap-southeast-2"
-AWS_BUCKET = "justinsinghatwalbucket"
-
-# ===== Cognito Setup =====
+# ===== Cognito / AWS Setup =====
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 
 def secret_hash(username):
+    """
+    Compute SECRET_HASH if client secret exists; return None otherwise.
+    """
+    if not COGNITO_CLIENT_SECRET:
+        return None
     message = bytes(username + COGNITO_CLIENT_ID, 'utf-8')
     key = bytes(COGNITO_CLIENT_SECRET, 'utf-8')
     return base64.b64encode(hmac.new(key, message, digestmod='sha256').digest()).decode()
 
 def cognito_authenticate(username, password):
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    auth_params = {
+        "USERNAME": username,
+        "PASSWORD": password
+    }
+    sh = secret_hash(username)
+    if sh:
+        auth_params["SECRET_HASH"] = sh
     try:
         response = client.initiate_auth(
             AuthFlow="USER_PASSWORD_AUTH",
-            AuthParameters={
-                "USERNAME": username,
-                "PASSWORD": password,
-                "SECRET_HASH": secret_hash(username)
-            },
+            AuthParameters=auth_params,
             ClientId=COGNITO_CLIENT_ID
         )
         return response.get("AuthenticationResult")
@@ -54,44 +50,88 @@ def cognito_authenticate(username, password):
 
 def cognito_signup(username, password, email):
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    kwargs = {
+        "ClientId": COGNITO_CLIENT_ID,
+        "Username": username,
+        "Password": password,
+        "UserAttributes": [{"Name": "email", "Value": email}]
+    }
+    sh = secret_hash(username)
+    if sh:
+        kwargs["SecretHash"] = sh
     try:
-        return client.sign_up(
-            ClientId=COGNITO_CLIENT_ID,
-            Username=username,
-            Password=password,
-            SecretHash=secret_hash(username),
-            UserAttributes=[{"Name": "email", "Value": email}]
-        )
+        return client.sign_up(**kwargs)
     except Exception as e:
         print(f"[ERROR] Cognito sign-up failed: {e}")
         return None
 
 def cognito_confirm_signup(username, confirmation_code):
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    kwargs = {
+        "ClientId": COGNITO_CLIENT_ID,
+        "Username": username,
+        "ConfirmationCode": confirmation_code
+    }
+    sh = secret_hash(username)
+    if sh:
+        kwargs["SecretHash"] = sh
     try:
-        return client.confirm_sign_up(
-            ClientId=COGNITO_CLIENT_ID,
-            Username=username,
-            ConfirmationCode=confirmation_code,
-            SecretHash=secret_hash(username)
-        )
+        return client.confirm_sign_up(**kwargs)
     except Exception as e:
         print(f"[ERROR] Cognito confirmation failed: {e}")
+        return None
+
+# ===== Forgot Password / Reset =====
+def cognito_send_reset_code(username):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    kwargs = {"ClientId": COGNITO_CLIENT_ID, "Username": username}
+    sh = secret_hash(username)
+    if sh:
+        kwargs["SecretHash"] = sh
+    try:
+        return client.forgot_password(**kwargs)
+    except Exception as e:
+        print(f"[ERROR] Sending reset code failed: {e}")
+        return None
+
+def cognito_confirm_reset(username, code, new_password):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    kwargs = {
+        "ClientId": COGNITO_CLIENT_ID,
+        "Username": username,
+        "ConfirmationCode": code,
+        "Password": new_password
+    }
+    sh = secret_hash(username)
+    if sh:
+        kwargs["SecretHash"] = sh
+    try:
+        return client.confirm_forgot_password(**kwargs)
+    except Exception as e:
+        print(f"[ERROR] Confirm reset failed: {e}")
+        return None
+
+# ===== Cognito / Django User Helper =====
+def get_django_user_from_cognito(request):
+    """
+    Given a request with a Cognito session, return the corresponding Django User object.
+    """
+    User = get_user_model()
+    cognito_user = request.session.get("cognito_user")
+    if not cognito_user:
+        return None
+    username = cognito_user.get("username")
+    try:
+        return User.objects.get(username=username)
+    except User.DoesNotExist:
         return None
 
 def get_cognito_username(request):
     user = request.session.get('cognito_user')
     return user.get('username') if user else None
 
-def get_django_user_from_cognito(request):
-    username = get_cognito_username(request)
-    if not username:
-        return None
-    User = get_user_model()
-    user, _ = User.objects.get_or_create(username=username)
-    return user
 
-# ===== Login Decorators =====
+# ===== Decorators =====
 def cognito_login_required(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -101,26 +141,39 @@ def cognito_login_required(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
-def api_login_required(view_func):
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if 'cognito_user' not in request.session:
-            return JsonResponse({"error": "Authentication required"}, status=401)
-        return view_func(request, *args, **kwargs)
-    return wrapper
+def cognito_group_required(group_name=None):
+    """
+    Decorator to allow Cognito users in a specific group.
+    If group_name is None, any logged-in user is allowed.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            user_data = request.session.get("cognito_user")
+            if not user_data or "id_token" not in user_data:
+                return redirect("login")
+            if not group_name:
+                return view_func(request, *args, **kwargs)
+            try:
+                decoded = jwt.decode(user_data["id_token"], options={"verify_signature": False})
+                groups = decoded.get("cognito:groups", [])
+                if group_name in groups:
+                    return view_func(request, *args, **kwargs)
+                else:
+                    return redirect("unauthorized")
+            except Exception as e:
+                print(f"[ERROR] Token decoding failed: {e}")
+                return redirect("login")
+        return _wrapped_view
+    return decorator
 
-# ===== Views (Login / Register / Logout / Home / Dashboard) =====
+
+# ===== Views =====
 @csrf_exempt
-def confirm_view(request):
-    if request.method == "POST":
-        username = request.POST.get("username")
-        code = request.POST.get("confirmation_code")
-        if cognito_confirm_signup(username, code):
-            messages.success(request, "Confirmation successful! You can now log in.")
-            return redirect("login")
-        else:
-            messages.error(request, "Confirmation failed.")
-    return render(request, "confirm.html")
+@never_cache
+@xframe_options_exempt
+def unauthorized(request):
+    return render(request, 'unauthorized.html', status=401)
 
 def register_view(request):
     if request.method == 'POST':
@@ -146,38 +199,139 @@ def register_view(request):
 
     return render(request, 'register.html')
 
-def login_view(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        tokens = cognito_authenticate(username, password)
-        if tokens:
-            request.session['cognito_user'] = {
-                "username": username,
-                "id_token": tokens.get("IdToken"),
-                "access_token": tokens.get("AccessToken"),
-                "refresh_token": tokens.get("RefreshToken")
-            }
-            messages.success(request, "Login successful!")
-            return redirect('home')
-        messages.error(request, "Invalid username or password.")
-    return render(request, 'login.html')
+@csrf_exempt
+def confirm_view(request):
+    if request.method == "POST":
+        username = request.POST.get("username")
+        code = request.POST.get("confirmation_code")
+        if cognito_confirm_signup(username, code):
+            messages.success(request, "Confirmation successful! You can now log in.")
+            return redirect("login")
+        else:
+            messages.error(request, "Confirmation failed.")
+    return render(request, "confirm.html")
 
-@login_required(login_url='/login/')
+@csrf_exempt
+def login_view(request):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+
+    if request.method == "POST":
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+        if username and password:
+            # Attempt login
+            user = cognito_authenticate(username, password)
+            if user:
+                request.session['cognito_user'] = {
+                    'username': username,
+                    'id_token': user.get('IdToken')
+                }
+                messages.success(request, "Login successful!")
+                return redirect("home")
+            else:
+                messages.error(request, "Invalid username or password.")
+        elif "send_code" in request.POST:
+            # Forgot password: send reset code
+            username = request.POST.get("reset_username")
+            if username:
+                result = cognito_send_reset_code(username)
+                if result:
+                    messages.success(request, "Check your email for the reset code.")
+                else:
+                    messages.error(request, "Failed to send reset code.")
+        elif "confirm_reset" in request.POST:
+            # Confirm reset + login
+            username = request.POST.get("reset_username")
+            code = request.POST.get("reset_code")
+            new_password = request.POST.get("new_password")
+            if all([username, code, new_password]):
+                result = cognito_confirm_reset(username, code, new_password)
+                if result:
+                    user = cognito_authenticate(username, new_password)
+                    if user:
+                        request.session['cognito_user'] = {
+                            'username': username,
+                            'id_token': user.get('IdToken')
+                        }
+                        messages.success(request, "Password reset successful. Logged in!")
+                        return redirect("home")
+                    else:
+                        messages.error(request, "Reset succeeded, but login failed.")
+                else:
+                    messages.error(request, "Password reset failed.")
+    return render(request, "login.html")
+
+
+
+@csrf_exempt
+def reset_password_confirm_view(request):
+    if request.method == "POST":
+        username = request.POST.get("username")
+        code = request.POST.get("code")
+        new_password = request.POST.get("new_password")
+        confirm_password = request.POST.get("confirm_password")
+
+        if not all([username, code, new_password, confirm_password]):
+            messages.error(request, "All fields are required.")
+            return redirect("reset_password_confirm")
+
+        if new_password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+            return redirect("reset_password_confirm")
+
+        client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+        try:
+            client.confirm_forgot_password(
+                ClientId=COGNITO_CLIENT_ID,
+                Username=username,
+                ConfirmationCode=code,
+                Password=new_password,
+                SecretHash=secret_hash(username)  # <-- added SecretHash
+            )
+            messages.success(request, "Password reset successful! You can now log in.")
+            return redirect("login")
+        except Exception as e:
+            messages.error(request, f"Password reset failed: {str(e)}")
+            return redirect("reset_password_confirm")
+
+    return render(request, "reset_password_confirm.html")
+
+
+
+
+
+@cognito_login_required
 def logout_view(request):
     request.session.pop('cognito_user', None)
     request.session.flush()
     messages.success(request, "Logged out successfully.")
     return redirect("login")
 
-@cognito_login_required
-def home(request):
-    return render(request, 'home.html')
 
+
+# ===== Dashboard / Admin using Cognito only =====
 @cognito_login_required
 def dashboard_view(request):
-    apps = JobApplication.objects.select_related('user', 'resume').order_by('-created_at')
-    return render(request, 'dashboard.html', {'job_applications': apps})
+    apps = JobApplication.objects.all()
+    username = get_cognito_username(request)
+    is_admin = is_cognito_admin(username)  # updated function
+    return render(request, 'dashboard.html', {
+        'job_applications': apps,
+        'is_admin': is_admin
+    })
+
+
+@cognito_group_required("Admin")  # only users in Admin group
+def admin_dashboard_view(request):
+    django_user = get_django_user_from_cognito(request)
+
+    resumes = Resume.objects.select_related('user').order_by('-created_at')
+    job_apps = JobApplication.objects.select_related('user', 'resume').order_by('-created_at')
+
+    return render(request, "admin_dashboard.html", {
+        "resumes": resumes,
+        "job_applications": job_apps
+    })
 
 # ===== Resume Helpers =====
 def read_resume_text(resume):
@@ -209,7 +363,7 @@ def upload_resume(request):
     return render(request, 'resume/upload.html')
 
 @csrf_exempt
-@api_login_required
+@cognito_login_required
 def get_presigned_url(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=400)
@@ -226,7 +380,8 @@ def get_presigned_url(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 @csrf_exempt
-@api_login_required
+@cognito_login_required
+
 def confirm_upload(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=400)
@@ -239,8 +394,6 @@ def confirm_upload(request):
     resume_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{key}"
     try:
         resume = Resume.objects.create(s3_file_path=resume_url, user=django_user)
-        
-        # Return download & match URLs for frontend
         return JsonResponse({
             "success": True,
             "resume_id": resume.id,
@@ -266,7 +419,7 @@ def download_file(request):
         messages.error(request, f"Download failed: {e}")
         return redirect("dashboard")
 
-# ===== Retry Logic for Ollama =====
+# ===== Ollama / AI Matching =====
 def call_ollama(payload, retries=10, delay=3):
     url = f"{os.environ.get('OLLAMA_HOST', 'http://cab432-ollama:11434')}/api/generate"
     for attempt in range(retries):
@@ -281,7 +434,6 @@ def call_ollama(payload, retries=10, delay=3):
             else:
                 raise e
 
-# ===== Match Resume to Job =====
 @csrf_exempt
 @cognito_login_required
 def match_resume_to_job(request, resume_id):
@@ -325,15 +477,15 @@ def match_resume_to_job(request, resume_id):
             feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
 
             job_app = JobApplication.objects.create(
-            user=django_user,
-            resume=resume,
-            job_description=job_position,
-            ai_model="mistral",
-            score=float(score)/100.0,
-            status="completed",
-            feedback=feedback,
-            feedback_s3_url=feedback_s3_url
-        )
+                user=django_user,
+                resume=resume,
+                job_description=job_position,
+                ai_model="mistral",
+                score=float(score)/100.0,
+                status="completed",
+                feedback=feedback,
+                feedback_s3_url=feedback_s3_url
+            )
             messages.success(request, f"Match analysis complete! Score: {score}")
             return redirect("view_job_application", job_app_id=job_app.id)
         except Exception as e:
@@ -343,7 +495,6 @@ def match_resume_to_job(request, resume_id):
 
     return render(request, "resume/match.html", {"resume": resume})
 
-# ===== Tailored Resume Upload =====
 @cognito_login_required
 def upload_tailored_resume(request, job_app_id):
     django_user = get_django_user_from_cognito(request)
@@ -364,7 +515,6 @@ def upload_tailored_resume(request, job_app_id):
             messages.error(request, f"Failed to upload tailored resume: {e}")
     return redirect("job_application_detail", pk=job_app.id)
 
-# ===== Job Application Views =====
 @cognito_login_required
 def view_job_application(request, job_app_id):
     django_user = get_django_user_from_cognito(request)
@@ -377,7 +527,6 @@ def job_application_detail(request, pk):
     job_app = get_object_or_404(JobApplication, pk=pk, user=django_user)
     return render(request, "resume/job_application_detail.html", {"job_app": job_app})
 
-# ===== Test Login Page =====
 def test_login(request):
     return render(request, "login.html", {"test": "ok"})
 
@@ -393,3 +542,13 @@ def wait_for_ollama(timeout=60):
         except requests.exceptions.RequestException:
             time.sleep(2)
     raise Exception("Ollama not available after waiting.")
+
+# ===== Home View Restricted to 'User' Group =====
+# ===== Home View (any logged-in user) =====
+@cognito_group_required()  # no group restriction
+def home(request):
+    django_user = get_django_user_from_cognito(request)
+    return render(request, "home.html", {"username": django_user.username if django_user else "Guest"})
+
+
+
