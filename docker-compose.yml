@@ -1,7 +1,4 @@
-version: '3.9'
-
 services:
-  # Ollama service
   ollama:
     build:
       context: ./ollama
@@ -12,25 +9,25 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    command: >
-      sh -c "ollama serve &
-             until curl -s http://localhost:11434/api/tags >/dev/null; do sleep 2; done &&
-             ollama pull mistral &&
-             wait"
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+    command: sh -c "ollama serve"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 5s
+      retries: 12
 
-  # Django web service
   web:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: CAB432-web
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     ports:
       - "8000:8000"
-    command: >
-      sh -c "python manage.py migrate &&
-      python manage.py runserver 0.0.0.0:8000"
+    command: ["/code/entrypoint.sh"]
     environment:
       DB_HOST: ${DB_HOST}
       DB_NAME: ${DB_NAME}
@@ -38,17 +35,14 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_PORT: ${DB_PORT}
       DB_SSLMODE: ${DB_SSLMODE}
-      OLLAMA_HOST: "http://cab432-ollama:11434"
-      TEST_USERNAME: "testuser"
-      TEST_PASSWORD: "password123"
-      LOAD_TEST_URL: "http://localhost:8000/match_resume_to_job/1"
-      LOAD_TEST_DURATION: "30"
-      LOAD_TEST_THREADS: "5"
-      COGNITO_CLIENT_ID: 5dmsjn9reflk2l2auq48qr9r1r
-      COGNITO_CLIENT_SECRET: vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt
-      COGNITO_REGION: ap-southeast-2
+      USE_S3: "True"
+      AWS_PROFILE: "CAB432-STUDENT"
+      AWS_REGION: "ap-southeast-2"
+      AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
+      OLLAMA_URL: "http://ollama:11434"  # <-- added for web container to reach Ollama
     volumes:
       - .:/code
+      - C:\Users\Justin\.aws:/root/.aws:ro
 
 volumes:
   ollama_data:

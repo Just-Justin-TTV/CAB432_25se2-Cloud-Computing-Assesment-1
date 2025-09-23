@@ -3,10 +3,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Django settings from environment
+# Django settings
 SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret")
 DEBUG = os.environ.get("DEBUG", "True") == "True"
-ALLOWED_HOSTS = ["*"]  # adjust for production
+ALLOWED_HOSTS = ["*"]  # adjust in production
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -24,6 +24,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # for frontend fetch
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -55,7 +56,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'app1.wsgi.application'
 
-# Database configuration from environment
+# Database
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -68,7 +69,6 @@ DATABASES = {
     }
 }
 
-
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -76,17 +76,31 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-APPEND_SLASH = False
-
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
-
 STATIC_URL = 'static/'
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Tailwind
 TAILWIND_APP_NAME = 'theme'
-
 INTERNAL_IPS = ["127.0.0.1"]
+
+# CORS (frontend fetch support)
+INSTALLED_APPS += ["corsheaders"]
+CORS_ALLOW_ALL_ORIGINS = True  # development only
+
+# AWS S3
+USE_S3 = os.environ.get("USE_S3", "False") == "True"
+AWS_PROFILE = os.environ.get("AWS_PROFILE", "CAB432-STUDENT")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
+AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "justinsinghatwalbucket")
+AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL")  # optional, leave None for real AWS
+
+if USE_S3:
+    import boto3
+
+    def get_s3_client():
+        session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
+        return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)

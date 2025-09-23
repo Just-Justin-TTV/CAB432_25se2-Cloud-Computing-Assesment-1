@@ -1,16 +1,12 @@
 from django import forms
-from .models import Resume
 
-# Form for uploading a resume file
-class ResumeUploadForm(forms.ModelForm):
-    class Meta:
-        model = Resume
-        fields = ['original_file']
-        widgets = {
-            'original_file': forms.ClearableFileInput(attrs={'class': 'form-input'}),
-        }
+class ResumeUploadForm(forms.Form):
+    resume_file = forms.FileField(
+        required=True,
+        widget=forms.ClearableFileInput(attrs={'class': 'form-input'}),
+        label="Upload Resume"
+    )
 
-# Form for job description input
 class JobDescriptionForm(forms.Form):
     job_description = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 5, "placeholder": "Paste job description here"}),
@@ -20,3 +16,4 @@ class JobDescriptionForm(forms.Form):
         required=False,
         label="Generate multiple tailored versions"
     )
+
