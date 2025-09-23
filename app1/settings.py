@@ -75,7 +75,6 @@ def get_db_credentials():
     try:
         response = client.get_secret_value(SecretId=secret_name)
         secret_string = response.get("SecretString", "")
-        # If secret is JSON, parse it
         secret_json = json.loads(secret_string)
         return secret_json
     except ClientError as e:
@@ -93,7 +92,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("DB_NAME", "cohort_2025"),
         "USER": db_creds.get("username", "s381"),
-        "PASSWORD": db_creds.get("password", ""),  # <-- pulled from secret
+        "PASSWORD": db_creds.get("password", ""),
         "HOST": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
         "PORT": os.environ.get("DB_PORT", "5432"),
         "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "require")},
@@ -146,3 +145,14 @@ if USE_S3:
         session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
         return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)
 
+# ------------------------------
+# Cognito config
+# ------------------------------
+COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "ap-southeast-2_XEtlj9zEG")
+COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
+COGNITO_ADMIN_GROUP = os.environ.get("COGNITO_ADMIN_GROUP", "admin")
+
+print(f"[DEBUG] Cognito config loaded: "
+      f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")

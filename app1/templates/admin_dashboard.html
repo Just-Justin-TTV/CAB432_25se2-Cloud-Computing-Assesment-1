@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Dashboard</title>
+    <title>Admin Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
@@ -15,9 +15,9 @@
         <img src="{% static 'images/img4.jpg' %}" alt="Logo" />
         <ul class="w-full px-4 space-y-2 mt-6">
             <li>
-                <a href="{% url 'dashboard' %}" class="flex items-center p-3 rounded-lg bg-cyan-500 text-white font-medium shadow">
+                <a href="{% url 'admin_dashboard' %}" class="flex items-center p-3 rounded-lg bg-cyan-500 text-white font-medium shadow">
                     <span class="material-icons mr-3">dashboard</span>
-                    Dashboard
+                    Admin Dashboard
                 </a>
             </li>
             <li>
@@ -32,22 +32,14 @@
                     Resumes
                 </a>
             </li>
-            {% if is_admin %}
-            <li>
-                <a href="{% url 'admin_dashboard' %}" class="flex items-center p-3 rounded-lg bg-red-500 text-white font-medium shadow hover:bg-red-600">
-                    <span class="material-icons mr-3">admin_panel_settings</span>
-                    Admin Dashboard
-                </a>
-            </li>
-            {% endif %}
         </ul>
     </aside>
 
     <!-- Main content -->
     <main class="flex-1 p-8">
         <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-semibold">Dashboard</h1>
-            <p class="text-sm text-gray-500">Welcome, {{ request.user.username }}</p>
+            <h1 class="text-2xl font-semibold">Admin Dashboard</h1>
+            <p class="text-sm text-gray-500">Welcome, Admin</p>
         </div>
 
         {% if messages %}
