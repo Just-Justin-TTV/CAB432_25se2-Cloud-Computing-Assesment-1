@@ -23,14 +23,9 @@ urlpatterns = [
     path('resume/get_presigned_url/', views.get_presigned_url, name='get_presigned_url'),
     path('resume/confirm_upload/', views.confirm_upload, name='confirm_upload'),
     path('resume/download_file/', views.download_file, name='download_file'),  # <--- added
-    path('unauthorized/', views.unauthorized, name='unauthorized'),
-
-    
 
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),
-    path('admin_dashboard/', views.admin_dashboard_view, name='admin_dashboard'),
-
 
     # Browser reload (dev)
     path("__reload__/", include("django_browser_reload.urls")),

@@ -18,28 +18,6 @@ COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 
-# ===== JWT Key Retrieval =====
-JWKS_URL = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-JWKS = requests.get(JWKS_URL).json()
-
-def verify_jwt(token):
-    """Verify and decode a Cognito JWT."""
-    header = jwt.get_unverified_header(token)
-    kid = header["kid"]
-
-    key = next((k for k in JWKS["keys"] if k["kid"] == kid), None)
-    if not key:
-        raise Exception("Public key not found in jwks.json")
-
-    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key))
-    decoded = jwt.decode(
-        token,
-        public_key,
-        algorithms=["RS256"],
-        audience=CLIENT_ID,
-        issuer=f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}"
-    )
-    return decoded
 
 def secret_hash(username):
     msg = username + COGNITO_CLIENT_ID
