@@ -9,3 +9,4 @@ fi
 
 # Serve Ollama
 exec ollama serve
+
