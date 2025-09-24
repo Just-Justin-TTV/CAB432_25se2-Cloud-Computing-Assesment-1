@@ -19,6 +19,13 @@ services:
       interval: 5s
       retries: 12
 
+  memcached:
+    image: memcached:latest
+    container_name: cab432-memcached
+    restart: always
+    ports:
+      - "11211:11211"
+
   web:
     build:
       context: .
@@ -27,6 +34,8 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+      memcached:
+        condition: service_started
     ports:
       - "8000:8000"
     command: ["/code/entrypoint.sh"]
@@ -51,6 +60,10 @@ services:
       COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
       COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
       COGNITO_REGION: "ap-southeast-2"
+
+      # Memcached
+      MEMCACHED_HOST: "memcached"
+      MEMCACHED_PORT: "11211"
 
     volumes:
       - .:/code
