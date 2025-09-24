@@ -24,11 +24,14 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.http import JsonResponse
 from django.contrib.auth import login
+from django.core.cache import cache
 
 
 from .models import Resume, JobApplication
 from . import s3_utils
+from .api_cache import test_api_tags
 
+test_api_tags()
 
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
@@ -472,7 +475,6 @@ def dashboard_view(request):
         'is_admin': is_admin,  # only for showing the admin link
         'job_applications': job_applications,
     })
-
 
 
 

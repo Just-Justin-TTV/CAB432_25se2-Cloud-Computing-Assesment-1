@@ -22,7 +22,7 @@ sudo su - ubuntu
 cd /home/ubuntu/projects/CAB432_25se2-Cloud-Computing-Assesment-1
 sudo docker-compose up -d
 
-
+aws sso login --profile CAB432-STUDENT
 
 
 # How to install virtual environment:
