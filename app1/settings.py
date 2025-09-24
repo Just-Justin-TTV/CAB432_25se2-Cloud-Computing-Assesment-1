@@ -13,6 +13,12 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret")
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 ALLOWED_HOSTS = ["*"]
 
+MEMCACHED_HOST = os.environ.get('MEMCACHED_HOST', '127.0.0.1')
+MEMCACHED_PORT = int(os.environ.get('MEMCACHED_PORT', 11211))
+
+OLLAMA_HOST = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
+
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -60,29 +66,58 @@ TEMPLATES = [
     },
 ]
 
+# ------------------------------
+# Cache (Memcached) + Ollama API
+# ------------------------------
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
+        'LOCATION': f'{MEMCACHED_HOST}:{MEMCACHED_PORT}',
+    }
+}
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
+        'LOCATION': f'{MEMCACHED_HOST}:{MEMCACHED_PORT}',
+    }
+}
+
+
+
 WSGI_APPLICATION = 'app1.wsgi.application'
 
 # ------------------------------
 # AWS Secrets Manager function
 # ------------------------------
-def get_db_credentials():
-    secret_name = "n11605618-a2RDSecret"
-    region_name = "ap-southeast-2"
+# def get_db_credentials():
+#     secret_name = "n11605618-a2RDSecret"
+#     region_name = "ap-southeast-2"
     
-    session = boto3.session.Session()
-    client = session.client(service_name='secretsmanager', region_name=region_name)
+#     session = boto3.session.Session()
+#     client = session.client(service_name='secretsmanager', region_name=region_name)
     
-    try:
-        response = client.get_secret_value(SecretId=secret_name)
-        secret_string = response.get("SecretString", "")
-        secret_json = json.loads(secret_string)
-        return secret_json
-    except ClientError as e:
-        print("Error retrieving secret:", e)
-        raise e
+#     try:
+#         response = client.get_secret_value(SecretId=secret_name)
+#         secret_string = response.get("SecretString", "")
+#         secret_json = json.loads(secret_string)
+#         return secret_json
+#     except ClientError as e:
+#         print("Error retrieving secret:", e)
+#         raise e
 
-# Retrieve DB credentials
-db_creds = get_db_credentials()
+# Retrieve DB credentials from Secrets Manager (commented out)
+# db_creds = get_db_credentials()
+
+# Fallback / alternative: static credentials
+db_creds = {
+    "username": os.environ.get("DB_USER", "s381"),
+    "password": os.environ.get("DB_PASSWORD", "hQ5o87dNk9mx"),
+    "host": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
+    "dbname": os.environ.get("DB_NAME", "cohort_2025"),
+    "port": int(os.environ.get("DB_PORT", 5432))
+}
+
 
 # ------------------------------
 # Database
