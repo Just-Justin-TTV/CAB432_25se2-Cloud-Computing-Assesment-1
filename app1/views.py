@@ -26,12 +26,14 @@ from django.http import JsonResponse
 from django.contrib.auth import login
 from django.core.cache import cache
 
+import pyotp
+import qrcode
 
 from .models import Resume, JobApplication
 from . import s3_utils
 from .api_cache import test_api_tags
 
-test_api_tags()
+#test_api_tags()
 
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
@@ -191,22 +193,21 @@ def cognito_confirm_reset(username, code, new_password):
 
 # ===== Cognito / Django User Helper =====
 def get_django_user_from_cognito(request):
-    """
-    Given a request with a Cognito session, return the corresponding Django User object.
-    """
-    User = get_user_model()
-    cognito_user = request.session.get("cognito_user")
-    if not cognito_user:
-        return None
-    username = cognito_user.get("username")
-    try:
-        return User.objects.get(username=username)
-    except User.DoesNotExist:
-        return None
+    class User:
+        def __init__(self, username):
+            self.username = username
+    username = get_cognito_username(request)
+    return User(username) if username else None
 
 def get_cognito_username(request):
-    user = request.session.get('cognito_user')
-    return user.get('username') if user else None
+    token = request.session.get("cognito_token")
+    if not token:
+        return None
+    try:
+        decoded = jwt.decode(token, options={"verify_signature": False})
+        return decoded.get("username") or decoded.get("cognito:username")
+    except Exception:
+        return None
 
 def sync_cognito_user_to_django(request):
     """
@@ -258,32 +259,108 @@ def cognito_login_required(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
-def cognito_group_required(group_name=None):
-    """
-    Decorator to allow Cognito users in a specific group.
-    If group_name is None, any logged-in user is allowed.
-    """
+def cognito_group_required(required_group="user"):
     def decorator(view_func):
         @wraps(view_func)
-        def _wrapped_view(request, *args, **kwargs):
-            user_data = request.session.get("cognito_user")
-            if not user_data or "id_token" not in user_data:
+        def wrapper(request, *args, **kwargs):
+            token = request.session.get("cognito_token")
+            if not token:
                 return redirect("login")
-            if not group_name:
-                return view_func(request, *args, **kwargs)
             try:
-                decoded = jwt.decode(user_data["id_token"], options={"verify_signature": False})
+                decoded = jwt.decode(token, options={"verify_signature": False})
                 groups = decoded.get("cognito:groups", [])
-                if group_name in groups:
-                    return view_func(request, *args, **kwargs)
-                else:
-                    return redirect("unauthorized")
-            except Exception as e:
-                print(f"[ERROR] Token decoding failed: {e}")
+                if required_group not in groups:
+                    messages.error(request, "Access denied.")
+                    return redirect("login")
+            except Exception:
                 return redirect("login")
-        return _wrapped_view
+            return view_func(request, *args, **kwargs)
+        return wrapper
     return decorator
+def mfa_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.session.get("mfa_verified"):
+            messages.warning(request, "You must complete MFA verification first.")
+            return redirect("mfa_verify")
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
+
+@cognito_login_required
+def mfa_setup_view(request):
+    username = get_cognito_username(request)
+    if not username:
+        messages.error(request, "You must be logged in to set up MFA.")
+        return redirect("login")
+
+    # Generate or reuse secret from cache
+    secret = cache.get(f"mfa_secret_{username}")
+    if not secret:
+        secret = pyotp.random_base32()
+        cache.set(f"mfa_secret_{username}", secret, timeout=3600)
+
+    # Create provisioning URI
+    totp = pyotp.TOTP(secret)
+    uri = totp.provisioning_uri(name=username, issuer_name="CAB432App")
+
+    # Generate QR Code (base64 encoded so we can embed in HTML <img>)
+    qr = qrcode.make(uri)
+    buffer = BytesIO()
+    qr.save(buffer, format="PNG")
+    img_bytes = buffer.getvalue()
+    buffer.close()
+    qr_b64 = base64.b64encode(img_bytes).decode("utf-8")
+
+    return render(request, "mfa_setup.html", {"qr_code": qr_b64})
+
+@csrf_exempt
+@cognito_login_required
+def mfa_verify_view(request):
+    username = get_cognito_username(request)
+    if not username:
+        return redirect("login")
+
+    if request.method == "POST":
+        otp = request.POST.get("otp")
+        secret = cache.get(f"mfa_secret_{username}")
+        if not secret:
+            messages.error(request, "MFA setup not found. Please set up MFA first.")
+            return redirect("mfa_setup")
+
+        totp = pyotp.TOTP(secret)
+        if totp.verify(otp):
+            request.session["mfa_verified"] = True
+            messages.success(request, "MFA verification successful!")
+            return redirect("home")
+        else:
+            messages.error(request, "Invalid MFA code. Try again.")
+
+    return render(request, "mfa_verify.html")
+
+def some_view(request):
+    try:
+        tags = test_api_tags()
+    except Exception as e:
+        tags = []
+        print(f"[WARNING] test_api_tags failed: {e}")
+    return render(request, "template.html", {"tags": tags})
+
+# ==================================
+# Main Views
+# ==================================
+
+@cognito_group_required()
+@mfa_required
+def home(request):
+    django_user = get_django_user_from_cognito(request)
+    return render(request, "home.html", {"username": django_user.username if django_user else "Guest"})
+
+
+@cognito_group_required()
+@mfa_required
+def dashboard_view(request):
+    return render(request, "dashboard.html")
 
 # ===== Views =====
 @csrf_exempt
@@ -615,7 +692,7 @@ def match_resume_to_job(request, resume_id):
 
             Return JSON with keys: score, feedback
             """
-            payload = {"model": "mistral", "prompt": prompt, "stream": False}
+            payload = {"model": "gemma:2b", "prompt": prompt, "stream": False}
             response = call_ollama(payload)
 
             ai_text = response.get("response", "")
@@ -640,7 +717,7 @@ def match_resume_to_job(request, resume_id):
             user=django_user,
             resume=resume,
             job_description=job_position,
-            ai_model="mistral",
+            ai_model="gemma:2b",
             score=float(score)/100.0,
             status="completed",
             feedback=feedback,
@@ -708,6 +785,5 @@ def wait_for_ollama(timeout=60):
 def home(request):
     django_user = get_django_user_from_cognito(request)
     return render(request, "home.html", {"username": django_user.username if django_user else "Guest"})
-
 
 

@@ -71,4 +71,6 @@ PyJWT>=2.8.0
 
 pymemcache>=3.6.0
 
+pyotp
+qrcode
 

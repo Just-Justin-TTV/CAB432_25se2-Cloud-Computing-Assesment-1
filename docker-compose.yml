@@ -67,7 +67,7 @@ services:
 
     volumes:
       - .:/code
-      - C:\Users\Justin\.aws:/root/.aws:ro
+      - C:\Users\renya\.aws:/root/.aws:ro
 
 volumes:
   ollama_data:

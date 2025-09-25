@@ -12,6 +12,10 @@ urlpatterns = [
     path('confirm/', views.confirm_view, name='confirm'),
     path('test-login/', views.test_login, name='test_login'),
 
+    # MFA
+    path("mfa/setup/", views.mfa_setup_view, name="mfa_setup"),
+    path("mfa/verify/", views.mfa_verify_view, name="mfa_verify"),
+
     # Home / Dashboard
     path('', views.home, name='home'),
     path('dashboard/', views.dashboard_view, name='dashboard'),
