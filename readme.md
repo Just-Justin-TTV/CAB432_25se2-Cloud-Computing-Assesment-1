@@ -24,6 +24,7 @@ sudo docker-compose up -d
 
 aws sso login --profile CAB432-STUDENT
 
+https://d-97671c4bd0.awsapps.com/start/#/?tab=accounts
 
 # How to install virtual environment:
 
