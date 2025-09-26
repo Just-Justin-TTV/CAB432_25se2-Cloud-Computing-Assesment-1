@@ -16,6 +16,7 @@ urlpatterns = [
     path('', views.home, name='home'),
     path('dashboard/', views.dashboard_view, name='dashboard'),
     path('admin-dashboard/', views.admin_dashboard_view, name='admin_dashboard'),
+    
 
     # Resume
     path('resume/upload/', views.upload_resume, name='upload_resume'),
@@ -28,7 +29,7 @@ urlpatterns = [
     # Progress APIs
     path('api/progress/<str:user_id>/', views.get_resume_progress, name='resume_progress'),
     path('api/progress/<str:user_id>/<str:task_name>/', views.get_progress, name='get_progress'),
-    path('task-progress/<int:task_id>/', views.task_progress_api, name='task_progress_api'),
+    path('task-progress/<str:task_name>/', views.task_progress_api, name='task_progress_api'),
 
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),

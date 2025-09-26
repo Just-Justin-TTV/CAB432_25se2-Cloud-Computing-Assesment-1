@@ -1,65 +1,95 @@
-# dynamo_utils.py
-
 import boto3
-import time
-from decimal import Decimal
 from botocore.exceptions import ClientError
+import logging
+import time
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Change to logging.INFO if too verbose
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+# Initialize DynamoDB
+logging.info("Initializing DynamoDB resource...")
 dynamodb = boto3.resource("dynamodb", region_name="ap-southeast-2")
 table = dynamodb.Table("n11605618dynamo")
+logging.info(f"DynamoDB table '{table.name}' initialized successfully.")
 
-def save_progress(user_id, task_name, progress):
-    """
-    Save progress for a task. Use progress=None to clear.
-    """
-    try:
-        if progress is None:
-            table.delete_item(Key={"user_id": user_id, "task_name": task_name})
-            return
-        progress = max(0, min(100, int(progress)))
-        table.put_item(Item={"user_id": user_id, "task_name": task_name, "progress": Decimal(progress)})
-    except ClientError as e:
-        print(f"[ERROR] Failed to save progress: {e}")
 
-def load_progress(user_id, task_name):
+def save_progress(username: str, task_name: str, progress_value):
     """
-    Load current task progress from DynamoDB.
+    Save progress for a given task for a user.
+    Ensures username is string and progress_value is not None.
     """
+    if not username or progress_value is None:
+        raise ValueError("Username and progress value must be provided")
+    
     try:
-        resp = table.get_item(Key={"user_id": user_id, "task_name": task_name})
-        return float(resp.get("Item", {}).get("progress", 0))
+        table.update_item(
+            Key={'username': str(username)},
+            UpdateExpression='SET #task = :val',
+            ExpressionAttributeNames={'#task': task_name},
+            ExpressionAttributeValues={':val': progress_value}
+        )
+        return True
     except ClientError as e:
-        print(f"[ERROR] Failed to load progress: {e}")
+        print(f"[save_progress] Error: {e}")
+        return False
+
+
+def load_progress(username: str, task_name: str):
+    """
+    Load progress for a given task for a user.
+    Returns 0 if not found or on error.
+    """
+    if not username:
+        raise ValueError("Username must be provided")
+    
+    try:
+        response = table.get_item(Key={'username': str(username)})
+        item = response.get('Item', {})
+        return item.get(task_name, 0)
+    except ClientError as e:
+        print(f"[load_progress] Error: {e}")
         return 0
 
-def update_progress_smoothly(user_id, task_name, start, end, steps=5, delay=0.2):
-    """
-    Gradually increase progress from start to end.
-    """
-    for i in range(steps):
-        val = start + (end - start) * (i + 1) / steps
-        save_progress(user_id, task_name, val)
-        time.sleep(delay)
 
-def process_resume_chunks(resume_text, chunk_size=500):
+def update_progress_smoothly(username: str, task_name: str, target_value: float, step: float = 0.1):
     """
-    Break resume text into smaller chunks for AI processing.
+    Gradually update progress to a target value in increments.
+    Returns the final value.
     """
-    words = resume_text.split()
-    for i in range(0, len(words), chunk_size):
-        yield " ".join(words[i:i + chunk_size])
+    if not username:
+        raise ValueError("Username must be provided")
+    
+    current = load_progress(username, task_name)
+    while current < target_value:
+        current += step
+        if current > target_value:
+            current = target_value
+        save_progress(username, task_name, current)
+    return current
 
 
-
-def delete_progress(qut_username: str, task_name: str):
-    """Optional: delete a progress entry."""
-    try:
-        table.delete_item(
-            Key={
-                'qut-username': qut_username,
-                'task_name': task_name
-            }
-        )
-        print(f"Deleted progress: {qut_username} - {task_name}")
-    except ClientError as e:
-        print(f"Error deleting progress: {e.response['Error']['Message']}")
+def process_resume_chunks(username: str, chunks: list):
+    """
+    Process resume chunks sequentially and update progress.
+    Saves progress incrementally in DynamoDB.
+    """
+    if not username:
+        raise ValueError("Username must be provided")
+    
+    total_chunks = len(chunks)
+    for i, chunk in enumerate(chunks, start=1):
+        try:
+            # Placeholder for actual chunk processing (e.g., NLP, indexing)
+            # e.g., nlp_analyze_chunk(chunk)
+            time.sleep(0.1)  # simulate processing delay
+        except Exception as e:
+            print(f"[ERROR] Failed to process chunk {i}: {e}")
+        
+        progress = i / total_chunks
+        save_progress(username, 'resume_chunks', progress)
+    
+    save_progress(username, 'resume_chunks', 1.0)  # mark complete
+    return True
