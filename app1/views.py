@@ -29,9 +29,8 @@ from django.core.cache import cache
 
 from .models import Resume, JobApplication
 from . import s3_utils
-from .api_cache import test_api_tags
+from app1.api_cache import test_api_tags
 
-test_api_tags()
 
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
@@ -81,6 +80,12 @@ def is_cognito_admin(username):
     except Exception as e:
         print(f"[ERROR] Failed to check admin status for {username}: {e}")
         return False
+
+
+def debug_tags(request):
+    """Optional debug endpoint to manually test API tags"""
+    tags = test_api_tags()
+    return JsonResponse({"tags": tags})
 
 
 def cognito_authenticate(username, password):
