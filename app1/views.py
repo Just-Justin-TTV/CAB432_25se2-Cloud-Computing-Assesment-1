@@ -15,6 +15,7 @@ import jwt
 import requests
 from docx import Document
 from PyPDF2 import PdfReader
+from datetime import datetime
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
@@ -26,6 +27,7 @@ from django.http import JsonResponse
 from django.contrib.auth import login
 from django.core.cache import cache
 
+from django.contrib.auth.decorators import login_required
 
 from .models import Resume, JobApplication
 from . import s3_utils
@@ -33,6 +35,7 @@ from .api_cache import test_api_tags
 
 test_api_tags()
 
+DYNAMODB_TABLE = "n12008192-activity"
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
@@ -543,17 +546,66 @@ def get_presigned_url(request):
 def confirm_upload(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=400)
-    data = json.loads(request.body)
-    key = data.get("key")
-    if not key:
-        return JsonResponse({"error": "key required"}, status=400)
 
-    django_user = get_django_user_from_cognito(request)
-    resume_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{key}"
     try:
+        data = json.loads(request.body)
+        key = data.get("key")
+        if not key:
+            return JsonResponse({"error": "key required"}, status=400)
+
+        # Get Django user from Cognito session
+        django_user = get_django_user_from_cognito(request)
+        if not django_user:
+            return JsonResponse({"error": "User not authenticated"}, status=401)
+
+        # Construct S3 URL
+        resume_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{key}"
+
+        # Save resume record in database (RDS/PostgreSQL)
         resume = Resume.objects.create(s3_file_path=resume_url, user=django_user)
-        
-        # Return download & match URLs for frontend
+
+        # ===== DynamoDB Activity Logging =====
+        try:
+            # Use the low-level client (since we know it works from your test)
+            dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
+            
+            # Generate unique event ID and timestamp
+            event_id = f"evt-{uuid4()}"
+            timestamp = datetime.utcnow().isoformat() + "Z"
+            
+            # Log the resume upload activity
+            dynamodb.put_item(
+                TableName=DYNAMODB_TABLE,
+                Item={
+                    "qut-username": {"S": django_user.username},  # Must be your QUT username
+                    "event_id": {"S": event_id},
+                    "action": {"S": "resume_uploaded"},
+                    "timestamp": {"S": timestamp},
+                    "metadata": {"S": json.dumps({
+                        "resume_id": str(resume.id),
+                        "s3_url": resume_url,
+                        "s3_key": key,
+                        "file_type": "resume"
+                    })}
+                }
+            )
+            print(f"✓ DynamoDB logging successful for resume {resume.id}")
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            error_msg = e.response.get('Error', {}).get('Message', str(e))
+            
+            # Log the error but don't fail the entire operation
+            print(f"DynamoDB logging failed: {error_code} - {error_msg}")
+            
+            # Only skip logging for specific permission issues
+            if error_code in ['AccessDeniedException', 'ResourceNotFoundException']:
+                print("Skipping DynamoDB logging due to permissions/resource issue")
+            else:
+                # For other errors, you might want to investigate further
+                print(f"Unexpected DynamoDB error: {e}")
+
+        # Return success response
         return JsonResponse({
             "success": True,
             "resume_id": resume.id,
@@ -561,8 +613,154 @@ def confirm_upload(request):
             "download_url": f"/resume/download_file/?key={key}",
             "match_url": f"/resume/{resume.id}/match/"
         })
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+# Additional helper functions for DynamoDB operations
+def log_user_activity(username, action, metadata=None):
+    """
+    Helper function to log user activities to DynamoDB
+    """
+    try:
+        dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
+        
+        event_id = f"evt-{uuid4()}"
+        timestamp = datetime.utcnow().isoformat() + "Z"
+        
+        item = {
+            "qut-username": {"S": username},
+            "event_id": {"S": event_id},
+            "action": {"S": action},
+            "timestamp": {"S": timestamp}
+        }
+        
+        if metadata:
+            item["metadata"] = {"S": json.dumps(metadata)}
+        
+        response = dynamodb.put_item(
+            TableName=DYNAMODB_TABLE,
+            Item=item
+        )
+        
+        return True, f"Activity logged: {action}"
+        
+    except ClientError as e:
+        error_msg = f"Failed to log activity: {e.response.get('Error', {}).get('Message', str(e))}"
+        return False, error_msg
+
+
+def get_user_activities(username, limit=10):
+    """
+    Retrieve recent activities for a user from DynamoDB
+    """
+    try:
+        dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
+        
+        response = dynamodb.query(
+            TableName=DYNAMODB_TABLE,
+            KeyConditionExpression="#pk = :username",
+            ExpressionAttributeNames={"#pk": "qut-username"},
+            ExpressionAttributeValues={":username": {"S": username}},
+            Limit=limit,
+            ScanIndexForward=False  # Get most recent first
+        )
+        
+        activities = []
+        for item in response.get("Items", []):
+            activity = {
+                "event_id": item.get("event_id", {}).get("S", ""),
+                "action": item.get("action", {}).get("S", ""),
+                "timestamp": item.get("timestamp", {}).get("S", ""),
+            }
+            
+            # Parse metadata if it exists
+            if "metadata" in item:
+                try:
+                    activity["metadata"] = json.loads(item["metadata"]["S"])
+                except json.JSONDecodeError:
+                    activity["metadata"] = item["metadata"]["S"]
+            
+            activities.append(activity)
+        
+        return True, activities
+        
+    except ClientError as e:
+        error_msg = f"Failed to retrieve activities: {e.response.get('Error', {}).get('Message', str(e))}"
+        return False, error_msg
+
+
+# Example view to display user activity history
+@csrf_exempt
+def user_activity_history(request):
+    """
+    API endpoint to get user's activity history from DynamoDB
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "GET required"}, status=400)
+    
+    # Get Django user from Cognito session
+    django_user = get_django_user_from_cognito(request)
+    if not django_user:
+        return JsonResponse({"error": "User not authenticated"}, status=401)
+    
+    success, result = get_user_activities(django_user.username)
+    
+    if success:
+        return JsonResponse({
+            "success": True,
+            "activities": result
+        })
+    else:
+        return JsonResponse({
+            "success": False,
+            "error": result
+        }, status=500)
+
+
+# Example of logging different types of activities
+def example_activity_logging():
+    """
+    Examples of how to log different activities
+    """
+    username = "n12008192@qut.edu.au"
+    
+    # Log resume upload
+    log_user_activity(
+        username=username,
+        action="resume_uploaded",
+        metadata={
+            "resume_id": "123",
+            "s3_url": "https://bucket.s3.amazonaws.com/resume.pdf",
+            "file_size": "2MB"
+        }
+    )
+    
+    # Log job matching
+    log_user_activity(
+        username=username,
+        action="job_matched",
+        metadata={
+            "resume_id": "123",
+            "job_id": "456",
+            "match_score": 85.5
+        }
+    )
+    
+    # Log user login
+    log_user_activity(
+        username=username,
+        action="user_login",
+        metadata={
+            "login_method": "cognito",
+            "ip_address": "192.168.1.1"
+        }
+    )
+
+    
 
 # ===== File Download =====
 @cognito_login_required
