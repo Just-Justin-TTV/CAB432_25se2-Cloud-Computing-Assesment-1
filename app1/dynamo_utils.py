@@ -1,39 +1,65 @@
-import os
-import logging
-from datetime import datetime
+# dynamo_utils.py
+
 import boto3
+import time
+from decimal import Decimal
+from botocore.exceptions import ClientError
 
-AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
-DDB_TABLE_NAME = "n11605618table"  # your existing table
-dynamodb = boto3.client("dynamodb", region_name=AWS_REGION)
+dynamodb = boto3.resource("dynamodb", region_name="ap-southeast-2")
+table = dynamodb.Table("n11605618dynamo")
 
-def save_progress(user_id, progress):
+def save_progress(user_id, task_name, progress):
     """
-    Save progress for a user to DynamoDB.
+    Save progress for a task. Use progress=None to clear.
     """
-    dynamodb.put_item(
-        TableName=DDB_TABLE_NAME,
-        Item={
-            'qut-username': {'S': str(user_id)},
-            'progress': {'N': str(progress)},
-            'last_update': {'S': datetime.utcnow().isoformat()}
-        }
-    )
-    logging.debug(f"Progress saved: user={user_id}, progress={progress}")
+    try:
+        if progress is None:
+            table.delete_item(Key={"user_id": user_id, "task_name": task_name})
+            return
+        progress = max(0, min(100, int(progress)))
+        table.put_item(Item={"user_id": user_id, "task_name": task_name, "progress": Decimal(progress)})
+    except ClientError as e:
+        print(f"[ERROR] Failed to save progress: {e}")
 
-def load_progress(user_id):
+def load_progress(user_id, task_name):
     """
-    Load progress for a user from DynamoDB.
-    Returns 0 if not found.
+    Load current task progress from DynamoDB.
     """
-    response = dynamodb.get_item(
-        TableName=DDB_TABLE_NAME,
-        Key={
-            'qut-username': {'S': str(user_id)}
-        }
-    )
-    if 'Item' in response and 'progress' in response['Item']:
-        progress = int(response['Item']['progress']['N'])
-        logging.debug(f"Progress loaded: user={user_id}, progress={progress}")
-        return progress
-    return 0
+    try:
+        resp = table.get_item(Key={"user_id": user_id, "task_name": task_name})
+        return float(resp.get("Item", {}).get("progress", 0))
+    except ClientError as e:
+        print(f"[ERROR] Failed to load progress: {e}")
+        return 0
+
+def update_progress_smoothly(user_id, task_name, start, end, steps=5, delay=0.2):
+    """
+    Gradually increase progress from start to end.
+    """
+    for i in range(steps):
+        val = start + (end - start) * (i + 1) / steps
+        save_progress(user_id, task_name, val)
+        time.sleep(delay)
+
+def process_resume_chunks(resume_text, chunk_size=500):
+    """
+    Break resume text into smaller chunks for AI processing.
+    """
+    words = resume_text.split()
+    for i in range(0, len(words), chunk_size):
+        yield " ".join(words[i:i + chunk_size])
+
+
+
+def delete_progress(qut_username: str, task_name: str):
+    """Optional: delete a progress entry."""
+    try:
+        table.delete_item(
+            Key={
+                'qut-username': qut_username,
+                'task_name': task_name
+            }
+        )
+        print(f"Deleted progress: {qut_username} - {task_name}")
+    except ClientError as e:
+        print(f"Error deleting progress: {e.response['Error']['Message']}")

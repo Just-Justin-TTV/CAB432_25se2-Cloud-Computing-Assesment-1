@@ -18,7 +18,11 @@ class Resume(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.s3_file_path}"
+class TaskProgress(models.Model):
+    task_name = models.CharField(max_length=100)
+    progress = models.IntegerField(default=0)
 
+    
 class JobApplication(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),

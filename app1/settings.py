@@ -76,40 +76,11 @@ CACHES = {
     }
 }
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
-        'LOCATION': f'{MEMCACHED_HOST}:{MEMCACHED_PORT}',
-    }
-}
-
-
-
 WSGI_APPLICATION = 'app1.wsgi.application'
 
 # ------------------------------
-# AWS Secrets Manager function
+# Database
 # ------------------------------
-# def get_db_credentials():
-#     secret_name = "n11605618-a2RDSecret"
-#     region_name = "ap-southeast-2"
-    
-#     session = boto3.session.Session()
-#     client = session.client(service_name='secretsmanager', region_name=region_name)
-    
-#     try:
-#         response = client.get_secret_value(SecretId=secret_name)
-#         secret_string = response.get("SecretString", "")
-#         secret_json = json.loads(secret_string)
-#         return secret_json
-#     except ClientError as e:
-#         print("Error retrieving secret:", e)
-#         raise e
-
-# Retrieve DB credentials from Secrets Manager (commented out)
-# db_creds = get_db_credentials()
-
-# Fallback / alternative: static credentials
 db_creds = {
     "username": os.environ.get("DB_USER", "s381"),
     "password": os.environ.get("DB_PASSWORD", "hQ5o87dNk9mx"),
@@ -118,10 +89,6 @@ db_creds = {
     "port": int(os.environ.get("DB_PORT", 5432))
 }
 
-
-# ------------------------------
-# Database
-# ------------------------------
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -191,3 +158,17 @@ COGNITO_ADMIN_GROUP = os.environ.get("COGNITO_ADMIN_GROUP", "admin")
 
 print(f"[DEBUG] Cognito config loaded: "
       f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
+
+# ------------------------------
+# Django sessions (persistent login)
+# ------------------------------
+SESSION_COOKIE_AGE = 7 * 24 * 60 * 60  # 7 days
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
+CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
+
+# ------------------------------
+# Cognito token refresh config
+# ------------------------------
+COGNITO_TOKEN_REFRESH_MARGIN = 300  # seconds before expiry to refresh token

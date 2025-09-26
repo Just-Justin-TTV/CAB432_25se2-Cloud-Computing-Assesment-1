@@ -15,7 +15,7 @@ import jwt
 import requests
 from docx import Document
 from PyPDF2 import PdfReader
-
+from app1.models import TaskProgress
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login as django_login, get_user_model
@@ -25,7 +25,12 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.http import JsonResponse
 from django.contrib.auth import login
 from django.core.cache import cache
-from .dynamo_utils import save_progress, load_progress
+from .dynamo_utils import save_progress, load_progress, update_progress_smoothly, process_resume_chunks
+from django.urls import reverse
+
+
+
+
 
 
 
@@ -35,6 +40,8 @@ from .api_cache import test_api_tags
 
 test_api_tags()
 
+dynamodb = boto3.resource('dynamodb', region_name="ap-southeast-2")
+table = dynamodb.Table("n11605618dynamo")
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
@@ -47,6 +54,33 @@ COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 AWS_PROFILE = "CAB432-STUDENT"
 AWS_REGION = "ap-southeast-2"
 AWS_BUCKET = "justinsinghatwalbucket"
+
+
+def task_progress_api(request, task_id):
+    """
+    API endpoint to fetch task progress from DynamoDB.
+    """
+    try:
+        response = table.get_item(
+            Key={
+                'user_id': 'qut_username',   # replace with actual logged-in user if available
+                'task_name': str(task_id)    # using task_id as task_name
+            }
+        )
+
+        if 'Item' not in response:
+            return JsonResponse({'error': 'Task not found'}, status=404)
+
+        item = response['Item']
+        return JsonResponse({
+            'task_id': task_id,
+            'progress': float(item.get('progress', 0))
+        })
+
+    except ClientError as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 
 User = get_user_model()
 
@@ -511,6 +545,26 @@ def call_ollama(payload, retries=10, delay=3):
                 raise e
 
 
+def get_resume_progress(request):
+    """
+    API endpoint to return current progress for the logged-in user on any resume match.
+    """
+    django_user = get_django_user_from_cognito(request)
+    if not django_user:
+        return JsonResponse({'progress': 0})
+
+    # Default task_name for active resume matches
+    task_name = request.GET.get("task_name") or "resume_processing"
+    progress = load_progress(django_user.id, task_name) or 0
+    return JsonResponse({'progress': progress})
+
+def get_progress(request, user_id, task_name):
+    """
+    Generic API to return progress for any task for any user.
+    """
+    progress = load_progress(user_id, task_name) or 0
+    return JsonResponse({"progress": progress})
+
 @cognito_group_required("admin")
 def admin_dashboard_view(request):
     logging.debug(f"Accessing admin dashboard: request.user={request.user}")
@@ -522,79 +576,41 @@ def admin_dashboard_view(request):
     return render(request, 'admin_dashboard.html', {
         'job_applications': job_applications,
     })
-
-def process_resume_matching(django_user, resume, job_position):
+def update_progress(user_id: str, task_name: str, progress: int):
     """
-    Runs the resume-to-job matching workflow with progress tracking.
-    Returns: tuple (job_app instance, progress dict)
+    Update the progress of a task for a user.
+
+    Args:
+        user_id (str): The user's ID.
+        task_name (str): A unique identifier for the task.
+        progress (int): Progress percentage (0-100).
     """
-    task_name = f"match_resume_{resume.id}"  # unique task key
-
-    # Load previous progress
-    progress = load_progress(django_user.id, task_name) or 0
-
     try:
-        # Step 1: Read resume text
-        save_progress(django_user.id, task_name, 10)
-        resume_text = read_resume_text(resume)
-        save_progress(django_user.id, task_name, 25)
+        # Ensure progress is between 0 and 100
+        progress = max(0, min(100, progress))
 
-        # Step 2: Prepare AI prompt
-        prompt = f"""
-        You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
-        Job Position: {job_position}
-        Resume Text: {resume_text}
-
-        Return JSON with keys: score, feedback
-        """
-        payload = {"model": "mistral", "prompt": prompt, "stream": False}
-        save_progress(django_user.id, task_name, 40)
-
-        # Step 3: Call Ollama AI
-        response = call_ollama(payload)
-        save_progress(django_user.id, task_name, 70)
-
-        ai_text = response.get("response", "")
-        score, feedback = 50, ""
-        if ai_text:
-            try:
-                parsed = json.loads(re.search(r"\{.*\}", ai_text, re.DOTALL).group(0))
-                score = parsed.get("score", 50)
-                feedback = parsed.get("feedback", "")
-                if isinstance(feedback, dict):
-                    feedback = json.dumps(feedback, indent=4)
-                else:
-                    feedback = str(feedback)
-            except Exception as parse_err:
-                print(f"[ERROR] AI parsing error: {parse_err}")
-                feedback = ai_text
-
-        # Step 4: Upload feedback to S3
-        key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
-        feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
-        save_progress(django_user.id, task_name, 90)
-
-        # Step 5: Save job application record
-        job_app = JobApplication.objects.create(
-            user=django_user,
-            resume=resume,
-            job_description=job_position,
-            ai_model="mistral",
-            score=float(score)/100.0,
-            status="completed",
-            feedback=feedback,
-            feedback_s3_url=feedback_s3_url
+        response = table.update_item(
+            Key={'user_id': user_id},
+            UpdateExpression="SET progress.#task = :value",
+            ExpressionAttributeNames={'#task': task_name},
+            ExpressionAttributeValues={':value': progress},
+            ReturnValues="UPDATED_NEW"
         )
-        save_progress(django_user.id, task_name, 100)
+        # Optional: print/log for debugging
+        print(f"Progress updated for {user_id} / {task_name}: {progress}%")
+        return response
 
-        # Clear progress
-        save_progress(django_user.id, task_name, None)
+    except ClientError as e:
+        print(f"Failed to update progress for {user_id} / {task_name}: {e}")
+        return None
 
-        return job_app, {"progress": 100}
+def task_progress_api(request):
+    user = request.user
+    task = TaskProgress.objects.filter(user=user, task_name="resume_match").first()
+    progress = task.progress if task else 0
+    return JsonResponse({"progress": progress})
 
-    except Exception as e:
-        save_progress(django_user.id, task_name, None)
-        raise e
+
 
 
 
@@ -701,11 +717,19 @@ def call_ollama(payload, retries=10, delay=3):
 @csrf_exempt
 @cognito_login_required
 def match_resume_to_job(request, resume_id):
+    """
+    Match a resume to a job with AI analysis and progress tracking.
+    Progress is stored in DynamoDB using task_name = "match_resume_<resume_id>".
+    """
     django_user = get_django_user_from_cognito(request)
     resume = get_object_or_404(Resume, id=resume_id, user=django_user)
     task_name = f"match_resume_{resume.id}"  # unique task key
 
+    # Load current progress (default 0 if nothing yet)
     progress = load_progress(django_user.id, task_name) or 0
+
+    # Build API URL for progress polling
+    task_progress_url = reverse('task_progress_api', kwargs={'task_id': resume.id})
 
     if request.method == "POST":
         job_position = request.POST.get("job_position")
@@ -714,12 +738,14 @@ def match_resume_to_job(request, resume_id):
             return redirect("match_resume_to_job", resume_id=resume.id)
 
         try:
+            # Step 1: Initialize & preprocessing
             save_progress(django_user.id, task_name, 10)
             resume_text = read_resume_text(resume)
             save_progress(django_user.id, task_name, 25)
 
+            # Step 2: AI evaluation
             prompt = f"""
-            You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
+            You are a highly intelligent assistant that evaluates resumes against job positions in detail.
             Job Position: {job_position}
             Resume Text: {resume_text}
 
@@ -746,6 +772,7 @@ def match_resume_to_job(request, resume_id):
                     print(f"[ERROR] AI parsing error: {parse_err}")
                     feedback = ai_text
 
+            # Step 3: Upload feedback & finalize
             key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
             feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
             save_progress(django_user.id, task_name, 90)
@@ -755,13 +782,15 @@ def match_resume_to_job(request, resume_id):
                 resume=resume,
                 job_description=job_position,
                 ai_model="mistral",
-                score=float(score)/100.0,
+                score=float(score) / 100.0,
                 status="completed",
                 feedback=feedback,
                 feedback_s3_url=feedback_s3_url
             )
+
+            # Task complete
             save_progress(django_user.id, task_name, 100)
-            save_progress(django_user.id, task_name, None)
+            save_progress(django_user.id, task_name, None)  # clear task
 
             messages.success(request, f"Match analysis complete! Score: {score}")
             return redirect("view_job_application", job_app_id=job_app.id)
@@ -771,11 +800,12 @@ def match_resume_to_job(request, resume_id):
             messages.error(request, f"AI processing failed: {e}")
             return redirect("match_resume_to_job", resume_id=resume.id)
 
-    return render(
-        request,
-        "resume/match.html",
-        {"resume": resume, "progress": progress}
-    )
+    return render(request, "resume/match.html", {
+        "resume": resume,
+        "progress": progress,
+        "task_progress_url": task_progress_url,
+    })
+
 
 
 def upload_tailored_resume(request, job_app_id):
