@@ -68,3 +68,6 @@ django-cors-headers
 requests>=2.31.0
 
 PyJWT>=2.8.0
+
+pymemcache
+python-memcached
