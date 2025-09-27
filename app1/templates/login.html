@@ -1,3 +1,10 @@
+<!-- 
+This template renders the sign-in page with:
+- Animated background pattern
+- Login form with username and password
+- Links to register and reset password
+- Modal for resetting password
+-->
 {% extends "base.html" %}
 {% load static %}
 
@@ -36,6 +43,7 @@
   <div class="animated-pattern"></div>
 
   <div class="bg-white bg-opacity-10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl w-full max-w-md transform hover:scale-105 transition-all duration-300 z-10">
+    
     <!-- Logo -->
     <div class="w-24 h-24 mx-auto mb-5 rounded-full ring-2 ring-white/20 shadow-md bg-white overflow-hidden">
       <img src="{% static 'images/img4.jpg' %}" alt="Logo" class="object-contain ring-2 ring-white/20 p-2" />
@@ -51,6 +59,7 @@
       <button type="submit" class="w-full bg-gradient-to-r from-emerald-500 to-teal-400 text-white font-bold py-3 px-4 rounded-lg hover:opacity-90 focus:ring-4 focus:ring-emerald-300 transition duration-300">Sign In</button>
     </form>
 
+    <!-- Links to reset password and register -->
     <div class="text-center mt-4">
       <a href="#" onclick="document.getElementById('reset-password-modal').classList.remove('hidden'); return false;" class="text-white/80 hover:underline text-sm">Forgot Password?</a>
     </div>
@@ -59,15 +68,17 @@
       Don't have an account? <a href="{% url 'register' %}" class="font-bold hover:underline text-white">Register</a>
     </p>
 
-    <!-- ===== Reset Password Modal ===== -->
+    <!-- Reset Password Modal -->
     <div id="reset-password-modal" class="hidden fixed inset-0 z-20 flex items-center justify-center bg-black/50">
       <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-lg">
         <h3 class="text-xl font-bold mb-4 text-center text-gray-800">Reset Password</h3>
         <form method="post">
           {% csrf_token %}
+          <!-- Step 1: Enter username to send reset code -->
           <input name="reset_username" placeholder="Username" class="w-full px-4 py-3 mb-2 rounded-lg border border-gray-300" required />
           <button type="submit" name="send_code" class="w-full bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg mb-4">Send Reset Code</button>
 
+          <!-- Step 2: Enter code and new password -->
           <input name="reset_code" placeholder="Reset Code" class="w-full px-4 py-3 mb-2 rounded-lg border border-gray-300" />
           <input name="new_password" type="password" placeholder="New Password" class="w-full px-4 py-3 mb-2 rounded-lg border border-gray-300" />
           <button type="submit" name="confirm_reset" class="w-full bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg">Confirm & Login</button>

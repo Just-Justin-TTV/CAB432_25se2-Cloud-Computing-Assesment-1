@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
-# Pull the mistral model if not present
+# Check if the Mistral model is already downloaded; pull it if missing
 if ! ollama list | grep -q "mistral"; then
-    echo "Pulling mistral model..."
     ollama pull gemma:2b
 fi
 
-# Serve Ollama
+# Start the Ollama server
 exec ollama serve
-

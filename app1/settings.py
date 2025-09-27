@@ -1,4 +1,4 @@
-import os
+import os  
 import json
 from pathlib import Path
 import boto3
@@ -7,10 +7,10 @@ from botocore.exceptions import ClientError
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ------------------------------
-# AWS Secrets Manager function
+# AWS Secrets Manager helper
 # ------------------------------
 def get_secrets(secret_name, region_name="ap-southeast-2"):
-    """Retrieve all secrets from AWS Secrets Manager"""
+    """Retrieve a secret from AWS Secrets Manager and return it as a Python dictionary."""
     session = boto3.session.Session()
     client = session.client(service_name="secretsmanager", region_name=region_name)
     try:
@@ -20,10 +20,9 @@ def get_secrets(secret_name, region_name="ap-southeast-2"):
             raise ValueError(f"No secret found for {secret_name}")
         return json.loads(secret_string)
     except ClientError as e:
-        print(f"Error retrieving secret {secret_name}: {e}")
         raise e
 
-# Fetch secrets from Secrets Manager
+# Fetch secrets for application configuration
 secrets = get_secrets(secret_name="n11605618-a2RDSecret")
 
 # ------------------------------
@@ -33,6 +32,7 @@ SECRET_KEY = secrets["SECRET_KEY"]
 DEBUG = True  # Set to False in production
 ALLOWED_HOSTS = ["*"]
 
+# Installed apps including Tailwind, custom app, and dev tools
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
+# Middleware stack
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -61,6 +62,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'app1.urls'
 
+# Template configuration
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -83,7 +85,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'app1.wsgi.application'
 
 # ------------------------------
-# Database
+# Database configuration
 # ------------------------------
 DB_USER = secrets["username"]
 DB_PASSWORD = secrets["password"]
@@ -104,21 +106,20 @@ DATABASES = {
 }
 
 # ------------------------------
-# Memcached cache with fallback
+# Memcached cache helper
 # ------------------------------
 MEMCACHED_HOST = os.environ.get('MEMCACHED_HOST', 'memcached')
 MEMCACHED_PORT = int(os.environ.get('MEMCACHED_PORT', 11211))
 DEFAULT_MEMCACHED_ENDPOINT = "127.0.0.1:11211"
 
 def get_cache_location():
+    """Return Memcached endpoint if available, otherwise fallback to localhost."""
     import socket
     try:
         sock = socket.create_connection((MEMCACHED_HOST, MEMCACHED_PORT), timeout=1)
         sock.close()
-        print(f"[INFO] Connected to Memcached at {MEMCACHED_HOST}:{MEMCACHED_PORT}")
         return f"{MEMCACHED_HOST}:{MEMCACHED_PORT}"
-    except Exception as e:
-        print(f"[WARNING] Cannot connect to Memcached at {MEMCACHED_HOST}:{MEMCACHED_PORT}, falling back: {e}")
+    except Exception:
         return DEFAULT_MEMCACHED_ENDPOINT
 
 CACHES = {
@@ -129,7 +130,7 @@ CACHES = {
 }
 
 # ------------------------------
-# AWS S3 / MinIO (optional)
+# AWS S3 / MinIO helper (optional)
 # ------------------------------
 USE_S3 = secrets.get("USE_S3", False)
 AWS_REGION = secrets.get("AWS_REGION", "ap-southeast-2")
@@ -138,6 +139,7 @@ AWS_S3_ENDPOINT_URL = secrets.get("AWS_S3_ENDPOINT_URL")
 
 if USE_S3:
     def get_s3_client():
+        """Return an S3 client for AWS or MinIO."""
         session = boto3.Session(region_name=AWS_REGION)
         return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)
 
@@ -151,7 +153,7 @@ COGNITO_CLIENT_SECRET = secrets.get("COGNITO_CLIENT_SECRET")
 COGNITO_ADMIN_GROUP = secrets.get("COGNITO_ADMIN_GROUP", "admin")
 
 # ------------------------------
-# Sessions & security
+# Sessions & security settings
 # ------------------------------
 SESSION_COOKIE_AGE = 7 * 24 * 60 * 60  # 7 days
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
@@ -160,7 +162,7 @@ SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "Tru
 CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
 
 # ------------------------------
-# Static & media (Tailwind integration)
+# Static & media files configuration
 # ------------------------------
 STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
@@ -168,6 +170,6 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ------------------------------
-# Cognito token refresh
+# Cognito token refresh margin
 # ------------------------------
-COGNITO_TOKEN_REFRESH_MARGIN = 300  # seconds before expiry to refresh token
+COGNITO_TOKEN_REFRESH_MARGIN = 300  # Seconds before expiry to refresh token
