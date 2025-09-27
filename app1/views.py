@@ -69,12 +69,34 @@ def get_api_tags():
     except requests.RequestException:
         return []
 
-def test_api_tags():
+def get_api_tags():
     """
-    Return the currently available API tags.
+    Fetch available API tags from Ollama.
+    Uses Django cache to avoid repeated requests.
     """
-    tags = get_api_tags()
-    return tags
+    try:
+        tags = cache.get("api_tags")
+        if tags:
+            logging.debug(f"Cache hit: {tags}")
+            return tags
+    except Exception as e:
+        logging.warning(f"Memcached not reachable: {e}")
+
+    # Fetch from Ollama
+    url = f"{os.environ.get('OLLAMA_URL', 'http://ollama:11434')}/api/tags"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        tags = response.json()
+        try:
+            cache.set("api_tags", tags, timeout=300)  # 5 mins
+        except Exception as e:
+            logging.warning(f"Failed to set cache: {e}")
+        return tags
+    except requests.RequestException as e:
+        logging.error(f"Failed to fetch tags from Ollama: {e}")
+        return []
+
 
 # ===== Resume Helpers =====
 def read_resume_text(resume):
