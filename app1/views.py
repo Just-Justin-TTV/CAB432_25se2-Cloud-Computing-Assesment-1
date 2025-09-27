@@ -22,7 +22,16 @@ from .models import Resume, JobApplication
 from . import s3_utils
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
+import os
+import logging
+import datetime
+import requests
+from django.core.cache import cache
 
+logger = logging.getLogger(__name__)
+
+# ===== Ollama Tags / Cache =====
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
 import requests
 import logging
 from django.core.cache import cache
@@ -56,33 +65,32 @@ def cognito_group_required(group_name=None):
 
 # ===== Ollama Tags / Cache =====
 def get_api_tags():
+    """
+    Fetch available Ollama API tags, using Memcached (AWS ElastiCache) for caching.
+    """
     cache_key = "api_tags"
     now = datetime.datetime.now().isoformat()
 
+    # Try fetching from cache first
     tags = cache.get(cache_key)
     if tags:
         logger.debug(f"[{now}] [CACHE HIT] Returning cached tags: {tags}")
-        print(f"[{now}] [CACHE HIT] Returning cached tags: {tags}")
         return tags
 
+    # Cache miss: fetch from Ollama API
     logger.debug(f"[{now}] [CACHE MISS] Fetching from Ollama...")
-    print(f"[{now}] [CACHE MISS] Fetching from Ollama...")
-
     try:
-        response = requests.get(f"{OLLAMA_URL}/api/tags")
+        response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
         response.raise_for_status()
         tags = response.json()
-        logger.debug(f"[{now}] [OLLAMA FETCH] Fetched tags: {tags}")
-        print(f"[{now}] [OLLAMA FETCH] Fetched tags: {tags}")
 
+        # Store in cache for 5 minutes
         cache.set(cache_key, tags, timeout=300)
         logger.debug(f"[{now}] [CACHE SET] Cached tags for 5 min")
-        print(f"[{now}] [CACHE SET] Cached tags for 5 min")
-
         return tags
+
     except requests.RequestException as e:
-        logger.error(f"[{now}] [ERROR] Failed to fetch tags: {e}")
-        print(f"[{now}] [ERROR] Failed to fetch tags: {e}")
+        logger.error(f"[{now}] [ERROR] Failed to fetch tags from Ollama: {e}")
         return {"models": []}
 
 
