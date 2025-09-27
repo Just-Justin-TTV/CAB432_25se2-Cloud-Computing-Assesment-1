@@ -54,7 +54,7 @@ services:
 
     volumes:
       - .:/code
-      - C:\Users\Justin\.aws:/root/.aws:ro
+      - /home/ubuntu/.aws:/root/.aws:ro
 
 volumes:
   ollama_data:
