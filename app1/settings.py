@@ -7,17 +7,38 @@ from botocore.exceptions import ClientError
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ------------------------------
+# AWS Secrets Manager function
+# ------------------------------
+def get_secrets(secret_name, region_name="ap-southeast-2"):
+    """Retrieve all secrets from AWS Secrets Manager"""
+    session = boto3.session.Session()
+    client = session.client(service_name="secretsmanager", region_name=region_name)
+    try:
+        response = client.get_secret_value(SecretId=secret_name)
+        secret_string = response.get("SecretString", "")
+        if not secret_string:
+            raise ValueError(f"No secret found for {secret_name}")
+        return json.loads(secret_string)
+    except ClientError as e:
+        print(f"Error retrieving secret {secret_name}: {e}")
+        raise e
+
+# Fetch secrets from Secrets Manager
+secrets = get_secrets(secret_name="n11605618-a2RDSecret")
+
+# Map secrets to Django expected variables
+SECRET_KEY = secrets["SECRET_KEY"]
+DB_USER = secrets["username"]
+DB_PASSWORD = secrets["password"]
+DB_NAME = secrets["dbname"]
+DB_HOST = secrets["host"]
+DB_PORT = secrets["port"]
+
+# ------------------------------
 # Django core settings
 # ------------------------------
-SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret")
-DEBUG = os.environ.get("DEBUG", "True") == "True"
+DEBUG = True  # Set to False in production
 ALLOWED_HOSTS = ["*"]
-
-MEMCACHED_HOST = os.environ.get('MEMCACHED_HOST', '127.0.0.1')
-MEMCACHED_PORT = int(os.environ.get('MEMCACHED_PORT', 11211))
-
-OLLAMA_HOST = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
-
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -30,7 +51,7 @@ INSTALLED_APPS = [
     'tailwind',
     'theme',
     'django_browser_reload',
-    'corsheaders',  # for frontend fetch support
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -52,7 +73,7 @@ TEMPLATES = [
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
             os.path.join(BASE_DIR, 'app1/templates'),
-            os.path.join(BASE_DIR, 'theme/templates'),
+            os.path.join(BASE_DIR, 'theme/templates')
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -92,69 +113,67 @@ db_creds = {
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "cohort_2025"),
-        "USER": db_creds.get("username", "s381"),
-        "PASSWORD": db_creds.get("password", ""),
-        "HOST": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
-        "PORT": os.environ.get("DB_PORT", "5432"),
-        "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "require")},
+        "NAME": DB_NAME,
+        "USER": DB_USER,
+        "PASSWORD": DB_PASSWORD,
+        "HOST": DB_HOST,
+        "PORT": DB_PORT,
+        "OPTIONS": {"sslmode": "require"},
     }
 }
 
 # ------------------------------
-# Password validation
+# Cache (ElastiCache Memcached with fallback)
 # ------------------------------
-AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
-]
+DEFAULT_MEMCACHED_ENDPOINT = "127.0.0.1:11211"  # fallback if ElastiCache fails
+MEMCACHED_ENDPOINT = secrets.get("MEMCACHED_ENDPOINT", DEFAULT_MEMCACHED_ENDPOINT)
 
-# ------------------------------
-# Internationalization
-# ------------------------------
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
-USE_I18N = True
-USE_TZ = True
+if ":" in MEMCACHED_ENDPOINT:
+    MEMCACHED_HOST, MEMCACHED_PORT = MEMCACHED_ENDPOINT.split(":")
+    MEMCACHED_PORT = int(MEMCACHED_PORT)
+else:
+    MEMCACHED_HOST = MEMCACHED_ENDPOINT
+    MEMCACHED_PORT = 11211
 
-STATIC_URL = 'static/'
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+def get_cache_location():
+    import socket
+    try:
+        sock = socket.create_connection((MEMCACHED_HOST, MEMCACHED_PORT), timeout=1)
+        sock.close()
+        print(f"[INFO] Connected to Memcached at {MEMCACHED_HOST}:{MEMCACHED_PORT}")
+        return f"{MEMCACHED_HOST}:{MEMCACHED_PORT}"
+    except Exception as e:
+        print(f"[WARNING] Cannot connect to Memcached at {MEMCACHED_HOST}:{MEMCACHED_PORT}, falling back: {e}")
+        return DEFAULT_MEMCACHED_ENDPOINT
 
-# ------------------------------
-# Tailwind
-# ------------------------------
-TAILWIND_APP_NAME = 'theme'
-INTERNAL_IPS = ["127.0.0.1"]
-
-# ------------------------------
-# CORS
-# ------------------------------
-CORS_ALLOW_ALL_ORIGINS = True  # development only
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.memcached.PyMemcacheCache",
+        "LOCATION": get_cache_location(),
+    }
+}
 
 # ------------------------------
 # AWS S3 (optional)
 # ------------------------------
-USE_S3 = os.environ.get("USE_S3", "False") == "True"
-AWS_PROFILE = os.environ.get("AWS_PROFILE", "CAB432-STUDENT")
-AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
-AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "justinsinghatwalbucket")
-AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL")
+USE_S3 = secrets.get("USE_S3", False)
+AWS_REGION = secrets.get("AWS_REGION", "ap-southeast-2")
+AWS_STORAGE_BUCKET_NAME = secrets.get("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_ENDPOINT_URL = secrets.get("AWS_S3_ENDPOINT_URL")
 
 if USE_S3:
     def get_s3_client():
-        session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
+        session = boto3.Session(region_name=AWS_REGION)
         return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)
 
 # ------------------------------
 # Cognito config
 # ------------------------------
-COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
-COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "ap-southeast-2_XEtlj9zEG")
-COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
-COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
-COGNITO_ADMIN_GROUP = os.environ.get("COGNITO_ADMIN_GROUP", "admin")
+COGNITO_REGION = secrets.get("COGNITO_REGION", "ap-southeast-2")
+COGNITO_USER_POOL_ID = secrets.get("COGNITO_USER_POOL_ID")
+COGNITO_CLIENT_ID = secrets.get("COGNITO_CLIENT_ID")
+COGNITO_CLIENT_SECRET = secrets.get("COGNITO_CLIENT_SECRET")
+COGNITO_ADMIN_GROUP = secrets.get("COGNITO_ADMIN_GROUP", "admin")
 
 print(f"[DEBUG] Cognito config loaded: "
       f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
