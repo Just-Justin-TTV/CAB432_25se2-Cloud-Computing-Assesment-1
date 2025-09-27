@@ -2,7 +2,7 @@ import time
 import psycopg2
 import os
 
-# Read database configuration from environment
+# Load database configuration from environment variables
 db_host = os.environ.get("DB_HOST")
 db_user = os.environ.get("DB_USER")
 db_pass = os.environ.get("DB_PASSWORD")
@@ -11,8 +11,10 @@ db_port = int(os.environ.get("DB_PORT", 5432))
 
 print("Waiting for database...")
 
+# Loop until the PostgreSQL database is reachable
 while True:
     try:
+        # Attempt to connect to the database
         conn = psycopg2.connect(
             host=db_host,
             user=db_user,
@@ -25,5 +27,6 @@ while True:
         print("Database ready!")
         break
     except psycopg2.OperationalError as e:
+        # Retry connection every 3 seconds if database is not ready
         print(f"Database not ready yet ({e}), retrying in 3 seconds...")
         time.sleep(3)

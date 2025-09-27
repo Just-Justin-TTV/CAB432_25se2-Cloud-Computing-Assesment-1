@@ -1,74 +1,78 @@
-# ASGI support for Django, provides asynchronous server gateway interface utilities
+# ASGI support for Django (asynchronous server gateway interface)
 asgiref==3.8.1
 
-# Django web framework, core of the project
+# Django web framework
 Django==5.1.7
 
-# Enables automatic browser reload during development for faster feedback
+# Automatic browser reload during development
 django-browser-reload==1.18.0
 
-# Integrates Tailwind CSS with Django for modern, utility-first styling
+# Integrates Tailwind CSS with Django
 django-tailwind==3.8.0
 
-# Library for processing XML and HTML documents efficiently
+# XML and HTML processing
 lxml==6.0.1
 
-# Fundamental package for numerical computing in Python
+# Numerical computing
 numpy==2.3.2
 
-# Powerful data analysis and manipulation library
+# Data analysis and manipulation
 pandas==2.3.1
 
-# Library for reading, writing, and manipulating PDF files
+# PDF file reading and writing
 PyPDF2==3.0.1
 
-# Provides robust date parsing and extensions to the standard datetime module
+# Enhanced date parsing
 python-dateutil==2.9.0.post0
 
-# Library for creating and updating Microsoft Word (.docx) files
+# Microsoft Word (.docx) file creation and editing
 python-docx==1.2.0
 
-# Timezone definitions for accurate date/time calculations
+# Timezone definitions
 pytz==2025.2
 
-# Python 2 and 3 compatibility utilities
+# Python 2/3 compatibility utilities
 six==1.17.0
 
-# SQL parsing library used internally by Django for query management
+# SQL parsing library
 sqlparse==0.5.3
 
-# Adds extra type hints and extensions to Python typing system
+# Additional type hints for Python typing
 typing_extensions==4.14.1
 
-# Timezone data required for proper timezone handling
+# Timezone data
 tzdata==2025.2
 
-# MySQL client library for Python, enables database connections using MySQLdb
+# MySQL client for Python (MySQLdb)
 mysqlclient==2.2.0
 
-# Pure Python MySQL client, alternative to mysqlclient
+# Pure Python MySQL client alternative
 PyMySQL>=1.0.2
 
-# HTTP library for making requests to external APIs or websites
+# HTTP requests library
+requests
 
-requests 
-
-# Library for interacting with the load testing tool
+# System and process utilities
 psutil
+
+# HTML/XML parsing
 beautifulsoup4
+
+# Environment variable management
 python-dotenv
+
+# PostgreSQL client for Python
 psycopg2-binary>=2.9
 
-
-# AWS Cognito / boto3
+# AWS SDK for Python
 boto3==1.26.0
 botocore==1.29.0
-python-dotenv
-django-cors-headers
-requests>=2.31.0
 
+# Cross-Origin Resource Sharing headers for Django
+django-cors-headers
+
+# JSON Web Token handling
 PyJWT>=2.8.0
 
+# Python memcache client
 pymemcache>=3.6.0
-
-
