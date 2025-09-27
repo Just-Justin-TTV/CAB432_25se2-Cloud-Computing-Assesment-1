@@ -15,7 +15,7 @@ import jwt
 import requests
 from docx import Document
 from PyPDF2 import PdfReader
-
+from app1.models import TaskProgress
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login as django_login, get_user_model
@@ -25,6 +25,14 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.http import JsonResponse
 from django.contrib.auth import login
 from django.core.cache import cache
+from .dynamo_utils import save_progress, load_progress, update_progress_smoothly, process_resume_chunks
+from django.urls import reverse
+from .dynamo_utils import display_progress
+from decimal import Decimal
+
+
+
+
 
 
 from .models import Resume, JobApplication
@@ -32,6 +40,8 @@ from . import s3_utils
 from app1.api_cache import test_api_tags
 
 
+dynamodb = boto3.resource('dynamodb', region_name="ap-southeast-2")
+table = dynamodb.Table("n11605618dynamo")
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
@@ -44,6 +54,40 @@ COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 AWS_PROFILE = "CAB432-STUDENT"
 AWS_REGION = "ap-southeast-2"
 AWS_BUCKET = "justinsinghatwalbucket"
+
+
+
+def task_progress_api(request, task_name):
+    """
+    Returns JSON: { progress: 0-100, result: { score, feedback } }
+    """
+    username = request.user.username
+    progress = load_progress(username, task_name) or Decimal("0")
+
+    result = {}
+    if progress >= 100:
+        # Try to fetch latest JobApplication for this task
+        from .models import JobApplication
+        job_app = JobApplication.objects.filter(user__username=username).order_by("-id").first()
+        if job_app:
+            result = {
+                "score": float(job_app.score)*100,
+                "feedback": job_app.feedback,
+            }
+
+    return JsonResponse({"progress": float(progress), "result": result})
+
+
+def safe_save_progress(username: str, task_name: str, progress_value):
+    """
+    Save progress only if it increases (monotonic).
+    """
+    current = Decimal(str(load_progress(username, task_name) or 0))
+    new_value = Decimal(str(progress_value))
+    if new_value > current:
+        save_progress(username, task_name, new_value)
+
+
 
 User = get_user_model()
 
@@ -89,10 +133,6 @@ def debug_tags(request):
 
 
 def cognito_authenticate(username, password):
-    """
-    Authenticate a user with Cognito using USER_PASSWORD_AUTH.
-    Returns AuthenticationResult dict on success, None on failure.
-    """
     logging.debug(f"Attempting login for user: {username}")
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
     auth_params = {"USERNAME": username, "PASSWORD": password}
@@ -110,7 +150,6 @@ def cognito_authenticate(username, password):
 
         if "ChallengeName" in response:
             logging.warning(f"Login challenge for {username}: {response['ChallengeName']}")
-            # You may handle NEW_PASSWORD_REQUIRED or other challenges here
             return None
 
         auth_result = response.get("AuthenticationResult")
@@ -125,22 +164,6 @@ def cognito_authenticate(username, password):
         logging.error(f"Login failed (Other) for {username}: {e}")
     return None
 
-def cognito_signup(username, password, email):
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    kwargs = {
-        "ClientId": COGNITO_CLIENT_ID,
-        "Username": username,
-        "Password": password,
-        "UserAttributes": [{"Name": "email", "Value": email}]
-    }
-    sh = secret_hash(username)
-    if sh:
-        kwargs["SecretHash"] = sh
-    try:
-        return client.sign_up(**kwargs)
-    except Exception as e:
-        print(f"[ERROR] Cognito sign-up failed: {e}")
-        return None
 
 def cognito_confirm_signup(username, confirmation_code):
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
@@ -172,9 +195,6 @@ def cognito_send_reset_code(username):
         return None
 
 def cognito_confirm_reset(username, code, new_password):
-    """
-    Confirm password reset in Cognito and optionally login the user.
-    """
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
     kwargs = {
         "ClientId": COGNITO_CLIENT_ID,
@@ -188,11 +208,11 @@ def cognito_confirm_reset(username, code, new_password):
     try:
         client.confirm_forgot_password(**kwargs)
         logging.info(f"Password reset confirmed for {username}")
-        # Try auto-login after reset
         return cognito_authenticate(username, new_password)
     except Exception as e:
         logging.error(f"Confirm reset failed for {username}: {e}")
         return None
+
 
 # ===== Cognito / Django User Helper =====
 def get_django_user_from_cognito(request):
@@ -214,10 +234,6 @@ def get_cognito_username(request):
     return user.get('username') if user else None
 
 def sync_cognito_user_to_django(request):
-    """
-    Sync the Cognito user session to a Django User and log them in.
-    """
-    from django.contrib.auth import get_user_model
     User = get_user_model()
     cognito_user = request.session.get("cognito_user")
     if not cognito_user:
@@ -227,7 +243,6 @@ def sync_cognito_user_to_django(request):
     username = cognito_user.get("username")
     logging.debug(f"Syncing Cognito user: {username}")
 
-    # Get Cognito groups
     client = boto3.client('cognito-idp', region_name=COGNITO_REGION)
     try:
         response = client.admin_list_groups_for_user(
@@ -240,17 +255,16 @@ def sync_cognito_user_to_django(request):
         logging.error(f"Failed to fetch Cognito groups for {username}: {e}")
         groups = []
 
-    # Create or update Django user
     user, created = User.objects.get_or_create(username=username)
     user.is_staff = 'admin' in [g.lower() for g in groups]
     user.is_superuser = 'admin' in [g.lower() for g in groups]
     user.save()
     logging.debug(f"Django user flags for {username}: is_staff={user.is_staff}, is_superuser={user.is_superuser}")
 
-    # Log user in
     login(request, user)
     logging.info(f"User {username} synced and logged in. Created new Django user? {created}")
     return user
+
 
 
 # ===== Decorators =====
@@ -264,10 +278,6 @@ def cognito_login_required(view_func):
     return wrapper
 
 def cognito_group_required(group_name=None):
-    """
-    Decorator to allow Cognito users in a specific group.
-    If group_name is None, any logged-in user is allowed.
-    """
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
@@ -288,6 +298,7 @@ def cognito_group_required(group_name=None):
                 return redirect("login")
         return _wrapped_view
     return decorator
+
 
 
 # ===== Views =====
@@ -449,21 +460,13 @@ def logout_view(request):
 @cognito_login_required
 def dashboard_view(request):
     username = get_cognito_username(request)
-    logging.debug(f"Dashboard accessed by username={username}")
-
     django_user = get_django_user_from_cognito(request)
-    logging.debug(f"Django user: {django_user}")
 
-    # Regular dashboard shows only user's own entries, regardless of admin status
     if django_user is None:
         job_applications = JobApplication.objects.none()
-        logging.warning("No Django user found. Returning empty queryset.")
     else:
         job_applications = JobApplication.objects.filter(user=django_user).select_related('resume')
 
-    logging.debug(f"Job applications returned: {job_applications.count()}")
-    
-    # Check admin group just to display the "Admin Dashboard" link
     client = boto3.client('cognito-idp', region_name=COGNITO_REGION)
     try:
         response = client.admin_list_groups_for_user(
@@ -477,12 +480,49 @@ def dashboard_view(request):
         is_admin = False
 
     return render(request, 'dashboard.html', {
-        'is_admin': is_admin,  # only for showing the admin link
+        'is_admin': is_admin,
         'job_applications': job_applications,
     })
 
 
+def process_resume_matching(username: str, resumes: list):
+    """
+    Match multiple resumes sequentially and track progress safely.
+    """
+    if not username or not resumes:
+        return False
 
+    total_resumes = len(resumes)
+    task_name = "resume_matching"
+
+    for i, resume in enumerate(resumes, start=1):
+        try:
+            # Placeholder: perform matching logic
+            time.sleep(0.1)
+        except Exception as e:
+            logging.error(f"Failed to process resume {i}: {e}")
+
+        # Incremental progress in decimal (0-100)
+        progress = Decimal(str(i / total_resumes * 100))
+        safe_save_progress(username, task_name, progress)
+
+    safe_save_progress(username, task_name, Decimal("100"))
+    return True
+
+
+def get_resume_progress(request):
+    django_user = get_django_user_from_cognito(request)
+    if not django_user:
+        return JsonResponse({"progress": 0})
+
+    task_name = request.GET.get("task_name") or "resume_processing"
+    progress = load_progress(django_user.username, task_name) or 0
+    return JsonResponse({'progress': progress})
+
+def get_progress(username: str, task_name: str):
+    if not username:
+        return 0
+    return load_progress(username, task_name) or 0
 
 @cognito_group_required("admin")
 def admin_dashboard_view(request):
@@ -495,6 +535,25 @@ def admin_dashboard_view(request):
     return render(request, 'admin_dashboard.html', {
         'job_applications': job_applications,
     })
+
+
+def update_progress(username: str, task_name: str, increment: float = 1.0):
+    """
+    Increment progress for a task safely.
+    Returns the new progress value.
+    """
+    if not username:
+        raise ValueError("Username must be provided")
+    
+    current = load_progress(username, task_name)
+    new_value = current + increment
+    save_progress(username, task_name, new_value)
+    return new_value
+
+
+
+
+
 
 
 
@@ -603,7 +662,16 @@ def call_ollama(payload, retries=10, delay=3):
 @cognito_login_required
 def match_resume_to_job(request, resume_id):
     django_user = get_django_user_from_cognito(request)
+    if not django_user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
     resume = get_object_or_404(Resume, id=resume_id, user=django_user)
+    task_name = f"match_resume_{resume.id}"
+
+    # Load current progress for frontend polling
+    progress = load_progress(django_user.username, task_name) or Decimal("0")
+    task_progress_url = reverse('task_progress_api', kwargs={'task_name': task_name})
 
     if request.method == "POST":
         job_position = request.POST.get("job_position")
@@ -612,17 +680,26 @@ def match_resume_to_job(request, resume_id):
             return redirect("match_resume_to_job", resume_id=resume.id)
 
         try:
+            # Step 1: Initialize
+            safe_save_progress(django_user.username, task_name, Decimal("10"))
             resume_text = read_resume_text(resume)
+            safe_save_progress(django_user.username, task_name, Decimal("25"))
+
+            # Step 2: AI evaluation
             prompt = f"""
             You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
             Job Position: {job_position}
             Resume Text: {resume_text}
-
+            
             Return JSON with keys: score, feedback
             """
             payload = {"model": "mistral", "prompt": prompt, "stream": False}
-            response = call_ollama(payload)
+            safe_save_progress(django_user.username, task_name, Decimal("40"))
 
+            response = call_ollama(payload)
+            safe_save_progress(django_user.username, task_name, Decimal("70"))
+
+            # Parse AI response
             ai_text = response.get("response", "")
             score, feedback = 50, ""
             if ai_text:
@@ -630,54 +707,45 @@ def match_resume_to_job(request, resume_id):
                     parsed = json.loads(re.search(r"\{.*\}", ai_text, re.DOTALL).group(0))
                     score = parsed.get("score", 50)
                     feedback = parsed.get("feedback", "")
-                    if isinstance(feedback, dict):
-                        feedback = json.dumps(feedback, indent=4)
-                    else:
-                        feedback = str(feedback)
+                    feedback = json.dumps(feedback, indent=4) if isinstance(feedback, dict) else str(feedback)
                 except Exception as parse_err:
-                    print(f"[ERROR] AI parsing error: {parse_err}")
+                    logging.error(f"AI parsing error: {parse_err}")
                     feedback = ai_text
 
+            # Step 3: Upload feedback to S3
             key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
             feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
+            safe_save_progress(django_user.username, task_name, Decimal("90"))
 
-            job_app = JobApplication.objects.create(
-            user=django_user,
-            resume=resume,
-            job_description=job_position,
-            ai_model="mistral",
-            score=float(score)/100.0,
-            status="completed",
-            feedback=feedback,
-            feedback_s3_url=feedback_s3_url
-        )
+            # Step 4: Create JobApplication record
+            JobApplication.objects.create(
+                user=django_user,
+                resume=resume,
+                job_description=job_position,
+                ai_model="mistral",
+                score=float(score)/100.0,
+                status="completed",
+                feedback=feedback,
+                feedback_s3_url=feedback_s3_url
+            )
+
+            # Step 5: Mark complete
+            safe_save_progress(django_user.username, task_name, Decimal("100"))
             messages.success(request, f"Match analysis complete! Score: {score}")
-            return redirect("view_job_application", job_app_id=job_app.id)
+            return redirect("dashboard")
+
         except Exception as e:
-            print(f"[ERROR] AI processing failed: {e}")
+            logging.error(f"[ERROR] AI processing failed: {e}")
             messages.error(request, f"AI processing failed: {e}")
             return redirect("match_resume_to_job", resume_id=resume.id)
 
-    return render(request, "resume/match.html", {"resume": resume})
+    return render(request, "resume/match.html", {
+        "resume": resume,
+        "progress": progress,
+        "task_progress_url": task_progress_url,
+    })
 
-def upload_tailored_resume(request, job_app_id):
-    django_user = get_django_user_from_cognito(request)
-    job_app = get_object_or_404(JobApplication, id=job_app_id, user=django_user)
-    if request.method == "POST" and request.FILES.get("tailored_resume"):
-        file_obj = request.FILES["tailored_resume"]
-        key = f"resumes/tailored/{job_app.user.username}/{uuid4()}_{file_obj.name}"
-        try:
-            file_bytes = file_obj.read()
-            if not file_bytes:
-                raise Exception("Uploaded file is empty!")
-            s3_url = s3_utils.upload_file_to_s3(file_bytes, key)
-            job_app.tailored_resume_s3_url = s3_url
-            job_app.save(update_fields=["tailored_resume_s3_url"])
-            messages.success(request, "Tailored resume uploaded successfully!")
-        except Exception as e:
-            print(f"[ERROR] Tailored resume upload failed: {e}")
-            messages.error(request, f"Failed to upload tailored resume: {e}")
-    return redirect("job_application_detail", pk=job_app.id)
+
 
 @cognito_login_required
 def view_job_application(request, job_app_id):

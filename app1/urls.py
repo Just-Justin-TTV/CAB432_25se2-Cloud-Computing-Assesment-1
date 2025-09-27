@@ -23,11 +23,16 @@ urlpatterns = [
     path('resume/<int:job_app_id>/view/', views.view_job_application, name='view_job_application'),
     path('resume/get_presigned_url/', views.get_presigned_url, name='get_presigned_url'),
     path('resume/confirm_upload/', views.confirm_upload, name='confirm_upload'),
-    path('resume/download_file/', views.download_file, name='download_file'),  # <--- added
+    path('resume/download_file/', views.download_file, name='download_file'),
+
+    # Progress APIs
+    path('api/progress/<str:username>/', views.get_resume_progress, name='resume_progress'),
+    path('api/progress/<str:username>/<str:task_name>/', views.get_progress, name='get_progress'),
+    path('task-progress/<str:task_name>/', views.task_progress_api, name='task_progress_api'),
 
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),
 
-    # Browser reload (dev)
+    # Browser reload (dev only)
     path("__reload__/", include("django_browser_reload.urls")),
 ]

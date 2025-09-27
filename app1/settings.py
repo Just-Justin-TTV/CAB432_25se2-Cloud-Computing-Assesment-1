@@ -87,11 +87,29 @@ TEMPLATES = [
     },
 ]
 
+# ------------------------------
+# Cache (Memcached) + Ollama API
+# ------------------------------
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
+        'LOCATION': f'{MEMCACHED_HOST}:{MEMCACHED_PORT}',
+    }
+}
+
 WSGI_APPLICATION = 'app1.wsgi.application'
 
 # ------------------------------
 # Database
 # ------------------------------
+db_creds = {
+    "username": os.environ.get("DB_USER", "s381"),
+    "password": os.environ.get("DB_PASSWORD", "hQ5o87dNk9mx"),
+    "host": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
+    "dbname": os.environ.get("DB_NAME", "cohort_2025"),
+    "port": int(os.environ.get("DB_PORT", 5432))
+}
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -161,14 +179,15 @@ print(f"[DEBUG] Cognito config loaded: "
       f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
 
 # ------------------------------
-# Static files
+# Django sessions (persistent login)
 # ------------------------------
-STATIC_URL = "/static/"
+SESSION_COOKIE_AGE = 7 * 24 * 60 * 60  # 7 days
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
+CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
 
-# For development (optional)
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
-
-# For collectstatic in production
-STATIC_ROOT = BASE_DIR / "staticfiles"
+# ------------------------------
+# Cognito token refresh config
+# ------------------------------
+COGNITO_TOKEN_REFRESH_MARGIN = 300  # seconds before expiry to refresh token
