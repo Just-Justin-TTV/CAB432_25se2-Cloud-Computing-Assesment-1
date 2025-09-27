@@ -27,7 +27,8 @@ from django.contrib.auth import login
 from django.core.cache import cache
 from .dynamo_utils import save_progress, load_progress, update_progress_smoothly, process_resume_chunks
 from django.urls import reverse
-
+from .dynamo_utils import display_progress
+from decimal import Decimal
 
 
 
@@ -62,7 +63,7 @@ def task_progress_api(request, task_name: str):
     if not django_user:
         return JsonResponse({"progress": 0})
 
-    progress = load_progress(django_user.id, task_name) or 0
+    progress = load_progress(django_user.username, task_name) or 0
     return JsonResponse({'username': django_user.username, 'task': task_name, 'progress': progress})
 
 
@@ -472,15 +473,14 @@ def process_resume_matching(username: str, resumes: list):
     for i, resume in enumerate(resumes, start=1):
         try:
             # Placeholder: perform matching logic
-            # e.g., match_resume_to_available_jobs(resume)
             time.sleep(0.1)  # simulate processing delay
         except Exception as e:
             print(f"[ERROR] Failed to match resume {i}: {e}")
         
-        progress = i / total_resumes
+        progress = Decimal(str(i / total_resumes))
         save_progress(username, 'resume_matching', progress)
     
-    save_progress(username, 'resume_matching', 1.0)  # mark complete
+    save_progress(username, 'resume_matching', Decimal("1.0"))  # mark complete
     return True
 
 
@@ -490,7 +490,7 @@ def get_resume_progress(request):
         return JsonResponse({"progress": 0})
 
     task_name = request.GET.get("task_name") or "resume_processing"
-    progress = load_progress(django_user.id, task_name) or 0
+    progress = load_progress(django_user.username, task_name) or 0
     return JsonResponse({'progress': progress})
 
 def get_progress(username: str, task_name: str):
@@ -645,10 +645,10 @@ def match_resume_to_job(request, resume_id):
         return redirect("login")
 
     resume = get_object_or_404(Resume, id=resume_id, user=django_user)
-    task_name = f"match_resume_{resume.id}"  # unique task key
+    task_name = f"match_resume_{resume.id}"
 
     # Load current progress
-    progress = load_progress(django_user.id, task_name) or 0
+    progress = load_progress(django_user.username, task_name) or 0
 
     # Build API URL for progress polling
     task_progress_url = reverse('task_progress_api', kwargs={'task_name': task_name})
@@ -661,9 +661,9 @@ def match_resume_to_job(request, resume_id):
 
         try:
             # Step 1: Initialize & preprocessing
-            save_progress(django_user.id, task_name, 10)
+            save_progress(django_user.username, task_name, Decimal("10"))
             resume_text = read_resume_text(resume)
-            save_progress(django_user.id, task_name, 25)
+            save_progress(django_user.username, task_name, Decimal("25"))
 
             # Step 2: AI evaluation
             prompt = f"""
@@ -674,10 +674,10 @@ def match_resume_to_job(request, resume_id):
             Return JSON with keys: score, feedback
             """
             payload = {"model": "mistral", "prompt": prompt, "stream": False}
-            save_progress(django_user.id, task_name, 40)
+            save_progress(django_user.username, task_name, Decimal("40"))
 
             response = call_ollama(payload)
-            save_progress(django_user.id, task_name, 70)
+            save_progress(django_user.username, task_name, Decimal("70"))
 
             ai_text = response.get("response", "")
             score, feedback = 50, ""
@@ -688,7 +688,6 @@ def match_resume_to_job(request, resume_id):
                     score = parsed.get("score", 50)
                     feedback = parsed.get("feedback", "")
                     if isinstance(feedback, dict):
-                        import json
                         feedback = json.dumps(feedback, indent=4)
                     else:
                         feedback = str(feedback)
@@ -699,7 +698,7 @@ def match_resume_to_job(request, resume_id):
             # Step 3: Upload feedback & finalize
             key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
             feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
-            save_progress(django_user.id, task_name, 90)
+            save_progress(django_user.username, task_name, Decimal("90"))
 
             job_app = JobApplication.objects.create(
                 user=django_user,
@@ -713,7 +712,7 @@ def match_resume_to_job(request, resume_id):
             )
 
             # Task complete
-            save_progress(django_user.id, task_name, 100)
+            save_progress(django_user.username, task_name, Decimal("100"))
 
             messages.success(request, f"Match analysis complete! Score: {score}")
             return redirect("view_job_application", job_app_id=job_app.id)
@@ -730,26 +729,6 @@ def match_resume_to_job(request, resume_id):
     })
 
 
-
-
-def upload_tailored_resume(request, job_app_id):
-    django_user = get_django_user_from_cognito(request)
-    job_app = get_object_or_404(JobApplication, id=job_app_id, user=django_user)
-    if request.method == "POST" and request.FILES.get("tailored_resume"):
-        file_obj = request.FILES["tailored_resume"]
-        key = f"resumes/tailored/{job_app.user.username}/{uuid4()}_{file_obj.name}"
-        try:
-            file_bytes = file_obj.read()
-            if not file_bytes:
-                raise Exception("Uploaded file is empty!")
-            s3_url = s3_utils.upload_file_to_s3(file_bytes, key)
-            job_app.tailored_resume_s3_url = s3_url
-            job_app.save(update_fields=["tailored_resume_s3_url"])
-            messages.success(request, "Tailored resume uploaded successfully!")
-        except Exception as e:
-            print(f"[ERROR] Tailored resume upload failed: {e}")
-            messages.error(request, f"Failed to upload tailored resume: {e}")
-    return redirect("job_application_detail", pk=job_app.id)
 
 @cognito_login_required
 def view_job_application(request, job_app_id):
