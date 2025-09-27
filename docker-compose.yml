@@ -45,16 +45,21 @@ services:
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
       OLLAMA_URL: "http://ollama:11434"
+      
 
       # Cognito
       COGNITO_USER_POOL_ID: "ap-southeast-2_XEtlj9zEG"
       COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
       COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
       COGNITO_REGION: "ap-southeast-2"
-
+      
       # Cache (AWS ElastiCache only)
       CACHE_HOST: "n11605618-ollama-memcached.km2jzi.cfg.apse2.cache.amazonaws.com"
       CACHE_PORT: "11211"
+
+      
+
+      
 
     volumes:
       - .:/code
