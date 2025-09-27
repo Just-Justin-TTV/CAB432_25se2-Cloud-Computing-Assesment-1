@@ -11,13 +11,13 @@ import datetime
 import requests
 from docx import Document
 from PyPDF2 import PdfReader
-
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
 from django.core.cache import cache
 from django.conf import settings
-
+response = requests.get(f"{settings.OLLAMA_URL}/api/tags")
 from .models import Resume, JobApplication
 from . import s3_utils
 

@@ -153,3 +153,5 @@ COGNITO_ADMIN_GROUP = os.environ.get("COGNITO_ADMIN_GROUP", "admin")
 
 print(f"[DEBUG] Cognito config loaded: "
       f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
