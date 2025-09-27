@@ -7,7 +7,7 @@ import base64
 from functools import wraps
 from uuid import uuid4
 import logging
-
+import datetime
 import requests
 from docx import Document
 from PyPDF2 import PdfReader
@@ -56,41 +56,35 @@ def cognito_group_required(group_name=None):
 
 # ===== Ollama Tags / Cache =====
 def get_api_tags():
-    """
-    Fetches API tags from Ollama, using ElastiCache to cache results for 5 minutes.
-    Logs all cache operations for debugging.
-    """
     cache_key = "api_tags"
+    now = datetime.datetime.now().isoformat()
 
-    # Check cache first
     tags = cache.get(cache_key)
     if tags:
-        logger.debug(f"[CACHE HIT] Returning cached tags: {tags}")
-        print(f"[CACHE HIT] Returning cached tags: {tags}")
+        logger.debug(f"[{now}] [CACHE HIT] Returning cached tags: {tags}")
+        print(f"[{now}] [CACHE HIT] Returning cached tags: {tags}")
         return tags
-    else:
-        logger.debug("[CACHE MISS] No cached tags found. Fetching from Ollama...")
-        print("[CACHE MISS] No cached tags found. Fetching from Ollama...")
+
+    logger.debug(f"[{now}] [CACHE MISS] Fetching from Ollama...")
+    print(f"[{now}] [CACHE MISS] Fetching from Ollama...")
 
     try:
         response = requests.get(f"{OLLAMA_URL}/api/tags")
         response.raise_for_status()
         tags = response.json()
-        logger.debug(f"[OLLAMA FETCH] Fetched tags: {tags}")
-        print(f"[OLLAMA FETCH] Fetched tags: {tags}")
+        logger.debug(f"[{now}] [OLLAMA FETCH] Fetched tags: {tags}")
+        print(f"[{now}] [OLLAMA FETCH] Fetched tags: {tags}")
 
-        # Store in cache for 5 minutes (300 seconds)
         cache.set(cache_key, tags, timeout=300)
-        logger.debug(f"[CACHE SET] Cached tags under key '{cache_key}' for 5 minutes")
-        print(f"[CACHE SET] Cached tags under key '{cache_key}' for 5 minutes")
+        logger.debug(f"[{now}] [CACHE SET] Cached tags for 5 min")
+        print(f"[{now}] [CACHE SET] Cached tags for 5 min")
 
         return tags
-
     except requests.RequestException as e:
-        logger.error(f"[ERROR] Failed to fetch tags from Ollama: {e}")
-        print(f"[ERROR] Failed to fetch tags from Ollama: {e}")
-        # Return empty dictionary as fallback
+        logger.error(f"[{now}] [ERROR] Failed to fetch tags: {e}")
+        print(f"[{now}] [ERROR] Failed to fetch tags: {e}")
         return {"models": []}
+
 
 def test_api_tags():
     """
