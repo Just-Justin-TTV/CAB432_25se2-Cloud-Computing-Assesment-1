@@ -23,6 +23,11 @@ from . import s3_utils
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
+import requests
+import logging
+from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
 # ===== Dummy User Setup for Headless Testing =====
 from django.contrib.auth import get_user_model
 User = get_user_model()
@@ -52,51 +57,47 @@ def cognito_group_required(group_name=None):
 # ===== Ollama Tags / Cache =====
 def get_api_tags():
     """
-    Fetch available API tags from Ollama.
-    Uses Django cache to avoid repeated requests.
+    Fetches API tags from Ollama, using ElastiCache to cache results for 5 minutes.
+    Logs all cache operations for debugging.
     """
-    tags = cache.get("api_tags")
+    cache_key = "api_tags"
+
+    # Check cache first
+    tags = cache.get(cache_key)
     if tags:
+        logger.debug(f"[CACHE HIT] Returning cached tags: {tags}")
+        print(f"[CACHE HIT] Returning cached tags: {tags}")
         return tags
+    else:
+        logger.debug("[CACHE MISS] No cached tags found. Fetching from Ollama...")
+        print("[CACHE MISS] No cached tags found. Fetching from Ollama...")
 
-    url = f"{os.environ.get('OLLAMA_HOST', 'http://cab432-ollama:11434')}/api/tags"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(f"{OLLAMA_URL}/api/tags")
         response.raise_for_status()
         tags = response.json()
-        cache.set("api_tags", tags, timeout=300)  # cache for 5 mins
-        return tags
-    except requests.RequestException:
-        return []
+        logger.debug(f"[OLLAMA FETCH] Fetched tags: {tags}")
+        print(f"[OLLAMA FETCH] Fetched tags: {tags}")
 
-def get_api_tags():
-    """
-    Fetch available API tags from Ollama.
-    Uses Django cache to avoid repeated requests.
-    """
-    try:
-        tags = cache.get("api_tags")
-        if tags:
-            logging.debug(f"Cache hit: {tags}")
-            return tags
-    except Exception as e:
-        logging.warning(f"Memcached not reachable: {e}")
+        # Store in cache for 5 minutes (300 seconds)
+        cache.set(cache_key, tags, timeout=300)
+        logger.debug(f"[CACHE SET] Cached tags under key '{cache_key}' for 5 minutes")
+        print(f"[CACHE SET] Cached tags under key '{cache_key}' for 5 minutes")
 
-    # Fetch from Ollama
-    url = f"{os.environ.get('OLLAMA_URL', 'http://ollama:11434')}/api/tags"
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        tags = response.json()
-        try:
-            cache.set("api_tags", tags, timeout=300)  # 5 mins
-        except Exception as e:
-            logging.warning(f"Failed to set cache: {e}")
         return tags
+
     except requests.RequestException as e:
-        logging.error(f"Failed to fetch tags from Ollama: {e}")
-        return []
+        logger.error(f"[ERROR] Failed to fetch tags from Ollama: {e}")
+        print(f"[ERROR] Failed to fetch tags from Ollama: {e}")
+        # Return empty dictionary as fallback
+        return {"models": []}
 
+def test_api_tags():
+    """
+    Return the currently available API tags.
+    """
+    tags = get_api_tags()
+    return tags
 
 # ===== Resume Helpers =====
 def read_resume_text(resume):
