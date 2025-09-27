@@ -58,16 +58,35 @@ AWS_BUCKET = "justinsinghatwalbucket"
 
 
 
-def task_progress_api(request, task_name: str):
-    django_user = get_django_user_from_cognito(request)
-    if not django_user:
-        return JsonResponse({"progress": 0})
+def task_progress_api(request, task_name):
+    """
+    Returns JSON: { progress: 0-100, result: { score, feedback } }
+    """
+    username = request.user.username
+    progress = load_progress(username, task_name) or Decimal("0")
 
-    progress = load_progress(django_user.username, task_name) or 0
-    return JsonResponse({'username': django_user.username, 'task': task_name, 'progress': progress})
+    result = {}
+    if progress >= 100:
+        # Try to fetch latest JobApplication for this task
+        from .models import JobApplication
+        job_app = JobApplication.objects.filter(user__username=username).order_by("-id").first()
+        if job_app:
+            result = {
+                "score": float(job_app.score)*100,
+                "feedback": job_app.feedback,
+            }
+
+    return JsonResponse({"progress": float(progress), "result": result})
 
 
-
+def safe_save_progress(username: str, task_name: str, progress_value):
+    """
+    Save progress only if it increases (monotonic).
+    """
+    current = Decimal(str(load_progress(username, task_name) or 0))
+    new_value = Decimal(str(progress_value))
+    if new_value > current:
+        save_progress(username, task_name, new_value)
 
 
 
@@ -463,24 +482,26 @@ def dashboard_view(request):
 
 def process_resume_matching(username: str, resumes: list):
     """
-    Match resumes to jobs sequentially and track progress.
-    Saves progress incrementally in DynamoDB.
+    Match multiple resumes sequentially and track progress safely.
     """
-    if not username:
-        raise ValueError("Username must be provided")
-    
+    if not username or not resumes:
+        return False
+
     total_resumes = len(resumes)
+    task_name = "resume_matching"
+
     for i, resume in enumerate(resumes, start=1):
         try:
             # Placeholder: perform matching logic
-            time.sleep(0.1)  # simulate processing delay
+            time.sleep(0.1)
         except Exception as e:
-            print(f"[ERROR] Failed to match resume {i}: {e}")
-        
-        progress = Decimal(str(i / total_resumes))
-        save_progress(username, 'resume_matching', progress)
-    
-    save_progress(username, 'resume_matching', Decimal("1.0"))  # mark complete
+            logging.error(f"Failed to process resume {i}: {e}")
+
+        # Incremental progress in decimal (0-100)
+        progress = Decimal(str(i / total_resumes * 100))
+        safe_save_progress(username, task_name, progress)
+
+    safe_save_progress(username, task_name, Decimal("100"))
     return True
 
 
@@ -635,10 +656,6 @@ def call_ollama(payload, retries=10, delay=3):
 @csrf_exempt
 @cognito_login_required
 def match_resume_to_job(request, resume_id):
-    """
-    Match a resume to a job with AI analysis and progress tracking.
-    Progress is stored in DynamoDB using task_name = "match_resume_<resume_id>".
-    """
     django_user = get_django_user_from_cognito(request)
     if not django_user:
         messages.error(request, "User not found.")
@@ -647,10 +664,8 @@ def match_resume_to_job(request, resume_id):
     resume = get_object_or_404(Resume, id=resume_id, user=django_user)
     task_name = f"match_resume_{resume.id}"
 
-    # Load current progress
-    progress = load_progress(django_user.username, task_name) or 0
-
-    # Build API URL for progress polling
+    # Load current progress for frontend polling
+    progress = load_progress(django_user.username, task_name) or Decimal("0")
     task_progress_url = reverse('task_progress_api', kwargs={'task_name': task_name})
 
     if request.method == "POST":
@@ -660,65 +675,62 @@ def match_resume_to_job(request, resume_id):
             return redirect("match_resume_to_job", resume_id=resume.id)
 
         try:
-            # Step 1: Initialize & preprocessing
-            save_progress(django_user.username, task_name, Decimal("10"))
+            # Step 1: Initialize
+            safe_save_progress(django_user.username, task_name, Decimal("10"))
             resume_text = read_resume_text(resume)
-            save_progress(django_user.username, task_name, Decimal("25"))
+            safe_save_progress(django_user.username, task_name, Decimal("25"))
 
             # Step 2: AI evaluation
             prompt = f"""
-            You are a highly intelligent assistant that evaluates resumes against job positions in detail.
+            You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
             Job Position: {job_position}
             Resume Text: {resume_text}
-
+            
             Return JSON with keys: score, feedback
             """
             payload = {"model": "mistral", "prompt": prompt, "stream": False}
-            save_progress(django_user.username, task_name, Decimal("40"))
+            safe_save_progress(django_user.username, task_name, Decimal("40"))
 
             response = call_ollama(payload)
-            save_progress(django_user.username, task_name, Decimal("70"))
+            safe_save_progress(django_user.username, task_name, Decimal("70"))
 
+            # Parse AI response
             ai_text = response.get("response", "")
             score, feedback = 50, ""
             if ai_text:
                 try:
-                    import json, re
                     parsed = json.loads(re.search(r"\{.*\}", ai_text, re.DOTALL).group(0))
                     score = parsed.get("score", 50)
                     feedback = parsed.get("feedback", "")
-                    if isinstance(feedback, dict):
-                        feedback = json.dumps(feedback, indent=4)
-                    else:
-                        feedback = str(feedback)
+                    feedback = json.dumps(feedback, indent=4) if isinstance(feedback, dict) else str(feedback)
                 except Exception as parse_err:
-                    print(f"[ERROR] AI parsing error: {parse_err}")
+                    logging.error(f"AI parsing error: {parse_err}")
                     feedback = ai_text
 
-            # Step 3: Upload feedback & finalize
+            # Step 3: Upload feedback to S3
             key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
             feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
-            save_progress(django_user.username, task_name, Decimal("90"))
+            safe_save_progress(django_user.username, task_name, Decimal("90"))
 
-            job_app = JobApplication.objects.create(
+            # Step 4: Create JobApplication record
+            JobApplication.objects.create(
                 user=django_user,
                 resume=resume,
                 job_description=job_position,
                 ai_model="mistral",
-                score=float(score) / 100.0,
+                score=float(score)/100.0,
                 status="completed",
                 feedback=feedback,
                 feedback_s3_url=feedback_s3_url
             )
 
-            # Task complete
-            save_progress(django_user.username, task_name, Decimal("100"))
-
+            # Step 5: Mark complete
+            safe_save_progress(django_user.username, task_name, Decimal("100"))
             messages.success(request, f"Match analysis complete! Score: {score}")
-            return redirect("view_job_application", job_app_id=job_app.id)
+            return redirect("dashboard")
 
         except Exception as e:
-            print(f"[ERROR] AI processing failed: {e}")
+            logging.error(f"[ERROR] AI processing failed: {e}")
             messages.error(request, f"AI processing failed: {e}")
             return redirect("match_resume_to_job", resume_id=resume.id)
 
