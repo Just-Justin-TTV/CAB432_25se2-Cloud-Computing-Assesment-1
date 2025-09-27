@@ -16,6 +16,9 @@ cd CAB432_25se2-Cloud-Computing-Assesment-1
 # Open a terminal on your local PC
 aws ssm start-session --target i-0c32d69a0e81389c4 --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"portNumber\":[\"8000\"],\"localPortNumber\":[\"8000\"]}"
 
+aws ssm start-session --target i-0c32d69a0e81389c4 --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"portNumber\":[\"8000\"],\"localPortNumber\":[\"8000\"]}" --region ap-southeast-2 --profile CAB432-STUDENT
+
+
 # On EC2 instance 
 # SSH/SSM session into EC2
 sudo su - ubuntu
