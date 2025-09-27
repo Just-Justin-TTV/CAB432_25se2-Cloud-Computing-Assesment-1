@@ -26,17 +26,10 @@ def get_secrets(secret_name, region_name="ap-southeast-2"):
 # Fetch secrets from Secrets Manager
 secrets = get_secrets(secret_name="n11605618-a2RDSecret")
 
-# Map secrets to Django expected variables
-SECRET_KEY = secrets["SECRET_KEY"]
-DB_USER = secrets["username"]
-DB_PASSWORD = secrets["password"]
-DB_NAME = secrets["dbname"]
-DB_HOST = secrets["host"]
-DB_PORT = secrets["port"]
-
 # ------------------------------
 # Django core settings
 # ------------------------------
+SECRET_KEY = secrets["SECRET_KEY"]
 DEBUG = True  # Set to False in production
 ALLOWED_HOSTS = ["*"]
 
@@ -87,28 +80,16 @@ TEMPLATES = [
     },
 ]
 
-# ------------------------------
-# Cache (Memcached) + Ollama API
-# ------------------------------
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
-        'LOCATION': f'{MEMCACHED_HOST}:{MEMCACHED_PORT}',
-    }
-}
-
 WSGI_APPLICATION = 'app1.wsgi.application'
 
 # ------------------------------
 # Database
 # ------------------------------
-db_creds = {
-    "username": os.environ.get("DB_USER", "s381"),
-    "password": os.environ.get("DB_PASSWORD", "hQ5o87dNk9mx"),
-    "host": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
-    "dbname": os.environ.get("DB_NAME", "cohort_2025"),
-    "port": int(os.environ.get("DB_PORT", 5432))
-}
+DB_USER = secrets["username"]
+DB_PASSWORD = secrets["password"]
+DB_NAME = secrets["dbname"]
+DB_HOST = secrets["host"]
+DB_PORT = secrets.get("port", 5432)
 
 DATABASES = {
     "default": {
@@ -123,17 +104,11 @@ DATABASES = {
 }
 
 # ------------------------------
-# Cache (ElastiCache Memcached with fallback)
+# Memcached cache with fallback
 # ------------------------------
-DEFAULT_MEMCACHED_ENDPOINT = "127.0.0.1:11211"  # fallback if ElastiCache fails
-MEMCACHED_ENDPOINT = secrets.get("MEMCACHED_ENDPOINT", DEFAULT_MEMCACHED_ENDPOINT)
-
-if ":" in MEMCACHED_ENDPOINT:
-    MEMCACHED_HOST, MEMCACHED_PORT = MEMCACHED_ENDPOINT.split(":")
-    MEMCACHED_PORT = int(MEMCACHED_PORT)
-else:
-    MEMCACHED_HOST = MEMCACHED_ENDPOINT
-    MEMCACHED_PORT = 11211
+MEMCACHED_HOST = os.environ.get('MEMCACHED_HOST', 'memcached')
+MEMCACHED_PORT = int(os.environ.get('MEMCACHED_PORT', 11211))
+DEFAULT_MEMCACHED_ENDPOINT = "127.0.0.1:11211"
 
 def get_cache_location():
     import socket
@@ -154,7 +129,7 @@ CACHES = {
 }
 
 # ------------------------------
-# AWS S3 (optional)
+# AWS S3 / MinIO (optional)
 # ------------------------------
 USE_S3 = secrets.get("USE_S3", False)
 AWS_REGION = secrets.get("AWS_REGION", "ap-southeast-2")
@@ -167,7 +142,7 @@ if USE_S3:
         return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)
 
 # ------------------------------
-# Cognito config
+# Cognito configuration
 # ------------------------------
 COGNITO_REGION = secrets.get("COGNITO_REGION", "ap-southeast-2")
 COGNITO_USER_POOL_ID = secrets.get("COGNITO_USER_POOL_ID")
@@ -175,11 +150,8 @@ COGNITO_CLIENT_ID = secrets.get("COGNITO_CLIENT_ID")
 COGNITO_CLIENT_SECRET = secrets.get("COGNITO_CLIENT_SECRET")
 COGNITO_ADMIN_GROUP = secrets.get("COGNITO_ADMIN_GROUP", "admin")
 
-print(f"[DEBUG] Cognito config loaded: "
-      f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
-
 # ------------------------------
-# Django sessions (persistent login)
+# Sessions & security
 # ------------------------------
 SESSION_COOKIE_AGE = 7 * 24 * 60 * 60  # 7 days
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
@@ -188,6 +160,14 @@ SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "Tru
 CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
 
 # ------------------------------
-# Cognito token refresh config
+# Static & media (Tailwind integration)
+# ------------------------------
+STATIC_URL = '/static/'
+MEDIA_URL = '/media/'
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# ------------------------------
+# Cognito token refresh
 # ------------------------------
 COGNITO_TOKEN_REFRESH_MARGIN = 300  # seconds before expiry to refresh token
