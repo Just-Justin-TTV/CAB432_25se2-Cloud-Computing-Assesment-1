@@ -1,4 +1,4 @@
-import os  
+import os
 import json
 from pathlib import Path
 import boto3
@@ -6,6 +6,16 @@ from botocore.exceptions import ClientError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ------------------------------
+# Django core settings
+# ------------------------------
+SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret")
+DEBUG = os.environ.get("DEBUG", "True") == "True"
+ALLOWED_HOSTS = ["*"]
+
+# ------------------------------
+# Memcached (ElastiCache) settings
+# ------------------------------
 MEMCACHED_HOST = os.environ.get(
     'MEMCACHED_HOST',
     'n11605618-ollama-memcached.km2jzi.cfg.apse2.cache.amazonaws.com'
@@ -22,13 +32,8 @@ CACHES = {
 OLLAMA_HOST = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
 
 # ------------------------------
-# Django core settings
+# Installed apps
 # ------------------------------
-
-DEBUG = True  # Set to False in production
-ALLOWED_HOSTS = ["*"]
-
-# Installed apps including Tailwind, custom app, and dev tools
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -40,10 +45,12 @@ INSTALLED_APPS = [
     'tailwind',
     'theme',
     'django_browser_reload',
-    'corsheaders',
+    'corsheaders',  # for frontend fetch support
 ]
 
-# Middleware stack
+# ------------------------------
+# Middleware
+# ------------------------------
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -58,13 +65,12 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'app1.urls'
 
-# Template configuration
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
             os.path.join(BASE_DIR, 'app1/templates'),
-            os.path.join(BASE_DIR, 'theme/templates')
+            os.path.join(BASE_DIR, 'theme/templates'),
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -81,69 +87,112 @@ TEMPLATES = [
 WSGI_APPLICATION = 'app1.wsgi.application'
 
 # ------------------------------
-# Database configuration
+# AWS Secrets Manager function (commented out)
 # ------------------------------
-DB_USER = secrets["username"]
-DB_PASSWORD = secrets["password"]
-DB_NAME = secrets["dbname"]
-DB_HOST = secrets["host"]
-DB_PORT = secrets.get("port", 5432)
+# def get_db_credentials():
+#     secret_name = "n11605618-a2RDSecret"
+#     region_name = "ap-southeast-2"
+#     session = boto3.session.Session()
+#     client = session.client(service_name='secretsmanager', region_name=region_name)
+#     try:
+#         response = client.get_secret_value(SecretId=secret_name)
+#         secret_string = response.get("SecretString", "")
+#         secret_json = json.loads(secret_string)
+#         return secret_json
+#     except ClientError as e:
+#         print("Error retrieving secret:", e)
+#         raise e
 
+# db_creds = get_db_credentials()  # commented out
+
+# Fallback / alternative: static credentials
+db_creds = {
+    "username": os.environ.get("DB_USER", "s381"),
+    "password": os.environ.get("DB_PASSWORD", "hQ5o87dNk9mx"),
+    "host": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
+    "dbname": os.environ.get("DB_NAME", "cohort_2025"),
+    "port": int(os.environ.get("DB_PORT", 5432))
+}
+
+# ------------------------------
+# Database (temporary SQLite for Django startup)
+# ------------------------------
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": DB_NAME,
-        "USER": DB_USER,
-        "PASSWORD": DB_PASSWORD,
-        "HOST": DB_HOST,
-        "PORT": DB_PORT,
-        "OPTIONS": {"sslmode": "require"},
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
 
-
+# ------------------------------
+# Original Postgres config (commented out)
+# ------------------------------
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": os.environ.get("DB_NAME", "cohort_2025"),
+#         "USER": db_creds.get("username", "s381"),
+#         "PASSWORD": db_creds.get("password", ""),
+#         "HOST": os.environ.get("DB_HOST", "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"),
+#         "PORT": os.environ.get("DB_PORT", "5432"),
+#         "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "require")},
+#     }
+# }
 
 # ------------------------------
-# AWS S3 / MinIO helper (optional)
+# Password validation
 # ------------------------------
-USE_S3 = secrets.get("USE_S3", False)
-AWS_REGION = secrets.get("AWS_REGION", "ap-southeast-2")
-AWS_STORAGE_BUCKET_NAME = secrets.get("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_ENDPOINT_URL = secrets.get("AWS_S3_ENDPOINT_URL")
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
+# ------------------------------
+# Internationalization
+# ------------------------------
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'UTC'
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = 'static/'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ------------------------------
+# Tailwind
+# ------------------------------
+TAILWIND_APP_NAME = 'theme'
+INTERNAL_IPS = ["127.0.0.1"]
+
+# ------------------------------
+# CORS
+# ------------------------------
+CORS_ALLOW_ALL_ORIGINS = True  # development only
+
+# ------------------------------
+# AWS S3 (optional)
+# ------------------------------
+USE_S3 = os.environ.get("USE_S3", "False") == "True"
+AWS_PROFILE = os.environ.get("AWS_PROFILE", "CAB432-STUDENT")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
+AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "justinsinghatwalbucket")
+AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL")
 
 if USE_S3:
     def get_s3_client():
-        """Return an S3 client for AWS or MinIO."""
-        session = boto3.Session(region_name=AWS_REGION)
+        session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
         return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)
 
 # ------------------------------
-# Cognito configuration
+# Cognito config
 # ------------------------------
-COGNITO_REGION = secrets.get("COGNITO_REGION", "ap-southeast-2")
-COGNITO_USER_POOL_ID = secrets.get("COGNITO_USER_POOL_ID")
-COGNITO_CLIENT_ID = secrets.get("COGNITO_CLIENT_ID")
-COGNITO_CLIENT_SECRET = secrets.get("COGNITO_CLIENT_SECRET")
-COGNITO_ADMIN_GROUP = secrets.get("COGNITO_ADMIN_GROUP", "admin")
+COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "ap-southeast-2_XEtlj9zEG")
+COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
+COGNITO_ADMIN_GROUP = os.environ.get("COGNITO_ADMIN_GROUP", "admin")
 
-# ------------------------------
-# Sessions & security settings
-# ------------------------------
-SESSION_COOKIE_AGE = 7 * 24 * 60 * 60  # 7 days
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False
-SESSION_SAVE_EVERY_REQUEST = True
-SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "True"
-CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
-
-# ------------------------------
-# Static & media files configuration
-# ------------------------------
-STATIC_URL = '/static/'
-MEDIA_URL = '/media/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# ------------------------------
-# Cognito token refresh margin
-# ------------------------------
-COGNITO_TOKEN_REFRESH_MARGIN = 300  # Seconds before expiry to refresh token
+print(f"[DEBUG] Cognito config loaded: "
+      f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
