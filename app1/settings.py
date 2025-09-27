@@ -171,3 +171,4 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Cognito token refresh
 # ------------------------------
 COGNITO_TOKEN_REFRESH_MARGIN = 300  # seconds before expiry to refresh token
+
