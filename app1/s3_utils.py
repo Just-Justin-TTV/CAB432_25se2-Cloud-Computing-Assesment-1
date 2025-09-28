@@ -1,32 +1,31 @@
-import os
+import os  
 import boto3
 from botocore.exceptions import ClientError
 
-# ===== AWS / S3 Setup =====
+# ===== AWS / S3 Configuration =====
 AWS_PROFILE = "CAB432-STUDENT"
 AWS_REGION = "ap-southeast-2"
 AWS_BUCKET = "justinsinghatwalbucket"
 
 def get_s3_client():
     """
-    Creates a boto3 client using the AWS CLI profile.
-    Works like `aws s3 presign ...` in CLI.
+    Initialize and return a boto3 S3 client using the specified AWS CLI profile.
+    Performs a sanity check by listing buckets to verify authentication.
     """
     try:
         session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
         client = session.client("s3")
         client.list_buckets()  # sanity check
-        print("[INFO] S3 client initialized and authenticated")
         return client
     except Exception as e:
-        print(f"[ERROR] Failed to initialize S3 client: {e}")
         raise Exception(
             f"S3 client initialization failed. Run `aws sso login --profile {AWS_PROFILE}` and ensure ~/.aws is mounted."
         )
 
 def upload_file_to_s3(file_bytes, key, content_type=None, expiration=3600):
     """
-    Generate a pre-signed URL for upload (if file_bytes is None) or upload directly.
+    Upload a file to S3 or generate a presigned URL for uploading if `file_bytes` is None.
+    Returns the uploaded file URL or presigned URL.
     """
     s3 = get_s3_client()
     if file_bytes is None:
@@ -48,7 +47,7 @@ def upload_file_to_s3(file_bytes, key, content_type=None, expiration=3600):
 
 def get_presigned_download_url(key, expiration=3600):
     """
-    Generate a presigned GET URL for downloading a file from S3.
+    Generate a presigned GET URL for securely downloading a file from S3.
     """
     s3 = get_s3_client()
     try:
@@ -59,5 +58,4 @@ def get_presigned_download_url(key, expiration=3600):
         )
         return url
     except ClientError as e:
-        print(f"[ERROR] Failed to generate presigned download URL: {e}")
         raise

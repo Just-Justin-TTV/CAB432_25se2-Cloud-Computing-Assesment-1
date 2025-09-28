@@ -20,3 +20,5 @@ load_test_cpu.log
 # OS files
 .DS_Store
 Thumbs.db
+
+.env

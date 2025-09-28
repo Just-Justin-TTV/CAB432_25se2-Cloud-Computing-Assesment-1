@@ -1,29 +1,38 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- Job Application Detail Page: shows detailed analysis for a specific job application -->
 <div class="job-application-detail">
+
+    <!-- Page heading -->
     <h1>Job Application Analysis</h1>
 
+    <!-- Display applicant username -->
     <p><strong>Applicant:</strong> {{ job_app.user.username }}</p>
 
+    <!-- Display job description -->
     <p><strong>Job Description:</strong></p>
     <div class="job-description" style="border:1px solid #ccc; padding:10px; background:#f9f9f9;">
         {{ job_app.job_description|linebreaks }}
     </div>
 
+    <!-- Display match score between resume and job description -->
     <p><strong>Match Score:</strong> {{ job_app.score|floatformat:2 }} / 1.00</p>
     <p><em>This score represents how well the uploaded resume matches the job description.</em></p>
 
+    <!-- Link to download tailored resume if available -->
     {% if job_app.tailored_resume_file %}
         <p><strong>Tailored Resume:</strong> 
             <a href="{{ job_app.tailored_resume_file.url }}" target="_blank">Download</a>
         </p>
     {% endif %}
 
+    <!-- Display any error messages from processing the job application -->
     {% if job_app.error_message %}
         <p style="color:red;"><strong>Errors:</strong> {{ job_app.error_message }}</p>
     {% endif %}
 
+    <!-- Display AI feedback for the job application -->
     {% if job_app.feedback %}
         <p><strong>AI Feedback:</strong></p>
         <div class="feedback" style="border:1px solid #ddd; padding:10px; background:#f1f1f1;">
@@ -32,5 +41,6 @@
     {% else %}
         <p><em>No AI feedback available.</em></p>
     {% endif %}
+
 </div>
 {% endblock %}

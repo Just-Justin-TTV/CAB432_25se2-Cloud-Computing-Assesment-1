@@ -1,4 +1,5 @@
 services:
+  # Ollama AI service
   ollama:
     build:
       context: ./ollama
@@ -12,11 +13,13 @@ services:
     environment:
       OLLAMA_HOST: "0.0.0.0:11434"
     command: sh -c "ollama serve"
+    # Health check to ensure Ollama API is ready
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 5s
       retries: 12
 
+  # Memcached caching service
   memcached:
     image: memcached:latest
     container_name: cab432-memcached
@@ -24,6 +27,7 @@ services:
     ports:
       - "11211:11211"
 
+  # Django web application service
   web:
     build:
       context: .
@@ -38,7 +42,7 @@ services:
       - "8000:8000"
     command: ["/code/entrypoint.sh"]
     environment:
-      # Database
+      # Database configuration
       DB_HOST: ${DB_HOST}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
@@ -46,26 +50,28 @@ services:
       DB_PORT: ${DB_PORT}
       DB_SSLMODE: ${DB_SSLMODE}
 
-      # S3
+      # S3 storage configuration
       USE_S3: "True"
       AWS_PROFILE: "CAB432-STUDENT"
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
       OLLAMA_URL: "http://ollama:11434"
 
-      # Cognito
+      # AWS Cognito authentication configuration
       COGNITO_USER_POOL_ID: "ap-southeast-2_XEtlj9zEG"
       COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
       COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
       COGNITO_REGION: "ap-southeast-2"
 
-      # Memcached
+      # Memcached configuration
       MEMCACHED_HOST: "memcached"
       MEMCACHED_PORT: "11211"
 
+    # Mount project code and AWS credentials
     volumes:
       - .:/code
       - C:\Users\Justin\.aws:/root/.aws:ro
 
+# Persistent volume for Ollama data
 volumes:
   ollama_data:

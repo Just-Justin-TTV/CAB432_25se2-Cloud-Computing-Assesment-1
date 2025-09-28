@@ -3,11 +3,14 @@
 
 {% block head %}
 <style>
+/* Animation for background gradient */
 @keyframes Animation { 
     0%{background-position:10% 0%}
     50%{background-position:91% 100%}
     100%{background-position:10% 0%}
 }
+
+/* Animated gradient background with overlay pattern */
 .animated-pattern {
     position: fixed;
     inset: 0;
@@ -26,45 +29,53 @@
 <div class="min-h-screen flex justify-center items-center px-4">
   <div class="animated-pattern"></div>
 
+  <!-- Account confirmation card -->
   <div class="bg-white bg-opacity-10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl w-full max-w-md transform hover:scale-105 transition-all duration-300 z-10">
 
+    <!-- Title and instructions -->
     <h2 class="text-4xl font-extrabold text-white mb-2 text-center">Confirm Your Account</h2>
     <p class="text-sm text-white/80 mb-6 text-center">
       Enter the verification code sent to your email
     </p>
 
+    <!-- Account confirmation form -->
     <form method="POST" class="space-y-4">
       {% csrf_token %}
+
+      <!-- Display flash messages -->
       {% if messages %}
-  <ul class="mb-4 space-y-2">
-    {% for message in messages %}
-      <li class="
-        {% if message.tags %}{{ message.tags }}{% endif %}
-        text-sm
-        px-3 py-2 rounded
-        {% if 'error' in message.tags %}bg-red-100 text-red-700{% endif %}
-        {% if 'success' in message.tags %}bg-green-100 text-green-700{% endif %}
-      ">
-        {{ message }}
-      </li>
-    {% endfor %}
-  </ul>
-{% endif %}
+        <ul class="mb-4 space-y-2">
+          {% for message in messages %}
+            <li class="
+              {% if message.tags %}{{ message.tags }}{% endif %}
+              text-sm
+              px-3 py-2 rounded
+              {% if 'error' in message.tags %}bg-red-100 text-red-700{% endif %}
+              {% if 'success' in message.tags %}bg-green-100 text-green-700{% endif %}
+            ">
+              {{ message }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
 
-
+      <!-- Username input -->
       <input name="username" placeholder="Username" required
              value="{{ request.POST.username|default:'' }}"
              class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white/60 focus:bg-opacity-30 focus:ring-2 focus:ring-emerald-300" />
 
+      <!-- Confirmation code input -->
       <input name="confirmation_code" placeholder="Confirmation Code" required
              value="{{ request.POST.confirmation_code|default:'' }}"
              class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white/60 focus:bg-opacity-30 focus:ring-2 focus:ring-emerald-300" />
 
+      <!-- Submit button -->
       <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-400 text-white font-bold rounded-lg hover:opacity-90">
         Confirm Account
       </button>
     </form>
 
+    <!-- Link for users who didn't receive a code -->
     <p class="text-white/90 text-center mt-6">
       Didn't receive a code? <a href="{% url 'register' %}" class="font-bold hover:underline text-white">Register again</a>
     </p>

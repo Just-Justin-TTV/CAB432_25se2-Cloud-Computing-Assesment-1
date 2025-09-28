@@ -1,8 +1,9 @@
-# Base image
+# Use Python 3.12 slim image as the base
 FROM python:3.12-slim
 
-# Set working directory
+# Set the working directory inside the container
 WORKDIR /code
+
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,7 +23,7 @@ COPY requirements.txt /code/
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy the project code
+# Copy the full project code into the container
 COPY . /code/
 
 # Environment variables
