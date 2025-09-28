@@ -16,7 +16,7 @@ Overview
 - **Name:** Justin Singh-Atwal
 - **Student number:** n11605618, n12008192
 - **Partner name (if applicable):** Reny Ann Cherian (N12008192)
-- **Application name:** FooBarBaz
+- **Application name:** ResumeHelper
 - **Two line description:** We implemented a application which allows users to upload a resume and receive ai generated feedback based on the job role they request,
                             users can view their past entries via the dashboard and if the user is in the Admin group they can use the admin dashboard to see all entries
 - **EC2 instance name or ID:** Justin Singh-Atwal ec2 instance, i-0c32d69a0e81389c4
