@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   ollama:
     build:
@@ -67,7 +65,7 @@ services:
 
     volumes:
       - .:/code
-      - C:\Users\renya\.aws:/root/.aws:ro
+      - C:\Users\Justin\.aws:/root/.aws:ro
 
 volumes:
   ollama_data:

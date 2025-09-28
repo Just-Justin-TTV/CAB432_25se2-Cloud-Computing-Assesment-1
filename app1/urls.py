@@ -31,6 +31,10 @@ urlpatterns = [
 
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),
+    path('mfa_verify/', views.mfa_verify_view, name='otp_verify'),  # <-- add this
+    path("mfa/email/", views.mfa_verify_view, name="email_otp_verify"),
+
+    path("mfa/software/", views.mfa_verify_view, name="mfa_verify"),
 
     # Browser reload (dev)
     path("__reload__/", include("django_browser_reload.urls")),

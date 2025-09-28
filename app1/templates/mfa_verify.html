@@ -5,26 +5,43 @@
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
         <div class="mx-auto max-w-2xl text-center">
             <h1 class="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Multi-Factor Authentication Verification
+                {% if challenge_type == "EMAIL_OTP" %}
+                    Email Verification
+                {% else %}
+                    Multi-Factor Authentication Verification
+                {% endif %}
             </h1>
             <p class="mt-6 text-lg leading-8 text-gray-300">
-                Enter the 6-digit code from your authenticator app to log in.
+                {% if challenge_type == "EMAIL_OTP" %}
+                    Enter the 6-digit code sent to your email to log in.
+                {% else %}
+                    Enter the 6-digit code from your authenticator app to log in.
+                {% endif %}
             </p>
 
             {% if messages %}
                 <div class="mt-4">
                     {% for message in messages %}
-                        <div class="p-2 rounded {{ message.tags }} bg-gray-700 text-white">{{ message }}</div>
+                        <div class="p-2 rounded {{ message.tags }} bg-gray-700 text-white">
+                            {{ message }}
+                        </div>
                     {% endfor %}
                 </div>
             {% endif %}
 
             <form method="POST" class="mt-8 flex flex-col items-center gap-4">
                 {% csrf_token %}
-                <input type="text" name="mfa_code" placeholder="Enter MFA code"
-                       class="rounded-md px-4 py-2 w-64 text-gray-900"/>
+                <input 
+                    type="text" 
+                    name="otp_code" 
+                    placeholder="Enter code"
+                    maxlength="6"
+                    pattern="\d{6}"
+                    required
+                    class="rounded-md px-4 py-2 w-64 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
                 <button type="submit"
-                        class="rounded-md bg-indigo-600 px-6 py-3 text-lg font-semibold text-white shadow-sm hover:bg-indigo-500">
+                        class="rounded-md bg-indigo-600 px-6 py-3 text-lg font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                     Verify & Login
                 </button>
             </form>
