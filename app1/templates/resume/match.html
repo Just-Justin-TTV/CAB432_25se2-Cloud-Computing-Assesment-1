@@ -20,7 +20,9 @@
             <p>
                 <strong>Resume:</strong>
                 {% if resume.s3_file_path %}
-                    <a href="{{ resume.s3_file_path }}" target="_blank" class="text-blue-600 underline">View / Download Resume</a>
+                    <a href="{{ resume.s3_file_path }}" download="{{ resume.candidate_name }}_resume" class="text-blue-600 underline">
+                        Download Resume
+                    </a>
                 {% else %}
                     Not available
                 {% endif %}
@@ -63,7 +65,7 @@
 /**
  * fetchProgress
  * Fetches the current AI processing progress and updates the progress bar.
- * If the process is complete, displays the match score and AI feedback.
+ * If the process is complete, displays the match score and AI feedback with download option.
  */
 function fetchProgress() {
     fetch("{{ task_progress_url }}")
@@ -82,10 +84,29 @@ function fetchProgress() {
                 resultDiv.innerHTML = `
                     <p><strong>Match Score:</strong> ${score}%</p>
                     <p><strong>AI Feedback:</strong></p>
-                    <div class="feedback border p-3 bg-gray-50 rounded">
+                    <div class="feedback border p-3 bg-gray-50 rounded" id="feedback-text">
                         ${feedback.replace(/\n/g, "<br>")}
                     </div>
+                    <button id="download-feedback-btn" 
+                            class="mt-3 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                        Download Feedback
+                    </button>
                 `;
+
+                // Add download functionality for feedback
+                const btn = document.getElementById("download-feedback-btn");
+                btn.addEventListener("click", () => {
+                    const blob = new Blob([feedback], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "{{ resume.candidate_name|default:'AI_Feedback' }}_feedback.txt";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+
                 // Stop progress animation once complete
                 bar.classList.remove("animate-pulse");
                 bar.classList.add("bg-green-600");
