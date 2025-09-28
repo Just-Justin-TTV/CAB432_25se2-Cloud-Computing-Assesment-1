@@ -6,6 +6,7 @@ import time
 import base64
 import hmac
 import logging
+import hashlib
 from functools import wraps
 from uuid import uuid4
 from decimal import Decimal
@@ -53,7 +54,12 @@ logger = logging.getLogger(__name__)
 
 
 # ===== Ollama Tags / Cache =====
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")from django.conf import settings
+from django.contrib.auth import login
+
+import pyotp
+import qrcode
+from io import BytesIO
 
 from .models import Resume, JobApplication
 from . import s3_utils
@@ -64,15 +70,12 @@ table = dynamodb.Table("n11605618dynamo")
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
-# ===== Cognito / AWS Setup =====
-COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
-COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
-COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
-COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
+COGNITO_REGION = "ap-southeast-2"
+COGNITO_USER_POOL_ID = settings.COGNITO_USER_POOL_ID
+COGNITO_ADMIN_GROUP = "admin"
 
-AWS_PROFILE = "CAB432-STUDENT"
-AWS_REGION = "ap-southeast-2"
 AWS_BUCKET = "justinsinghatwalbucket"
+AWS_REGION = "ap-southeast-2"
 
 
 def task_progress_api(request, task_name):
@@ -103,15 +106,16 @@ def safe_save_progress(username: str, task_name: str, progress_value):
 
 User = get_user_model()
 
-def secret_hash(username):
+def get_secret_hash(username: str) -> str:
     """Compute Cognito secret hash for a given username."""
-    if not COGNITO_CLIENT_SECRET:
-        return None
-    msg = username + COGNITO_CLIENT_ID
+    """
+    Compute the Cognito SECRET_HASH for a given username using the client secret.
+    """
+    message = username + CLIENT_ID
     dig = hmac.new(
         str(COGNITO_CLIENT_SECRET).encode("utf-8"),
-        msg.encode("utf-8"),
-        digestmod="sha256"
+        msg=message.encode("utf-8"),
+        digestmod=hashlib.sha256,
     ).digest()
     sh = base64.b64encode(dig).decode()
     return sh
@@ -124,137 +128,76 @@ def is_cognito_admin(username):
 
     client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
     try:
-        response = client.admin_list_groups_for_user(
+        resp = client.confirm_sign_up(
+            ClientId=CLIENT_ID,
             Username=username,
-            UserPoolId=COGNITO_USER_POOL_ID
+            ConfirmationCode=confirmation_code,
+            SecretHash=get_secret_hash(username),
         )
-        groups = [g['GroupName'] for g in response.get('Groups', [])]
-        return "Admin" in groups
-    except client.exceptions.UserNotFoundException:
-        return False
-    except Exception:
-        return False
+        return resp
+    except ClientError as e:
+        return {"error": str(e)}
 
-
-def debug_tags(request):
-    """Debug endpoint to test API tags."""
-    tags = test_api_tags()
-    return JsonResponse({"tags": tags})
-
-
-def cognito_authenticate(username, password):
-    """Authenticate a user with Cognito and return authentication tokens."""
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    auth_params = {"USERNAME": username, "PASSWORD": password}
-    sh = secret_hash(username)
-    if sh:
-        auth_params["SECRET_HASH"] = sh
-
+def cognito_initiate_auth(username, password):
     try:
-        response = client.initiate_auth(
+        resp = client.initiate_auth(
+            ClientId=CLIENT_ID,
             AuthFlow="USER_PASSWORD_AUTH",
-            AuthParameters=auth_params,
-            ClientId=COGNITO_CLIENT_ID
+            AuthParameters={
+                "USERNAME": username,
+                "PASSWORD": password,
+                "SECRET_HASH": get_secret_hash(username),
+            },
         )
+        return resp
+    except ClientError as e:
+        return {"error": str(e)}
 
-        if "ChallengeName" in response:
-            return None
-
-        auth_result = response.get("AuthenticationResult")
-        return auth_result
-
-    except client.exceptions.NotAuthorizedException:
-        pass
-    except client.exceptions.UserNotFoundException:
-        pass
-    except Exception:
-        pass
-    return None
-
-def cognito_signup(username, password, email):
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    kwargs = {
-        "ClientId": COGNITO_CLIENT_ID,
-        "Username": username,
-        "Password": password,
-        "UserAttributes": [{"Name": "email", "Value": email}]
-    }
-    sh = secret_hash(username)
-    if sh:
-        kwargs["SecretHash"] = sh
+def cognito_forgot_password(username):
     try:
-        return client.sign_up(**kwargs)
-    except Exception as e:
-        print(f"[ERROR] Cognito sign-up failed: {e}")
-        return None
+        resp = client.forgot_password(
+            ClientId=CLIENT_ID,
+            Username=username,
+            SecretHash=get_secret_hash(username),
+        )
+        return resp
+    except ClientError as e:
+        return {"error": str(e)}
 
-def cognito_confirm_signup(username, confirmation_code):
-    """Confirm a new Cognito user signup with a confirmation code."""
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    kwargs = {
-        "ClientId": COGNITO_CLIENT_ID,
-        "Username": username,
-        "ConfirmationCode": confirmation_code
-    }
-    sh = secret_hash(username)
-    if sh:
-        kwargs["SecretHash"] = sh
+def cognito_confirm_forgot_password(username, confirmation_code, new_password):
     try:
-        return client.confirm_sign_up(**kwargs)
-    except Exception:
-        return None
+        resp = client.confirm_forgot_password(
+            ClientId=CLIENT_ID,
+            Username=username,
+            ConfirmationCode=confirmation_code,
+            Password=new_password,
+            SecretHash=get_secret_hash(username),
+        )
+        return resp
+    except ClientError as e:
+        return {"error": str(e)}
 
-
-def cognito_send_reset_code(username):
-    """Send a password reset code to the user via Cognito."""
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    kwargs = {"ClientId": COGNITO_CLIENT_ID, "Username": username}
-    sh = secret_hash(username)
-    if sh:
-        kwargs["SecretHash"] = sh
-    try:
-        return client.forgot_password(**kwargs)
-    except Exception:
-        return None
-
-
-def cognito_confirm_reset(username, code, new_password):
-    """Confirm a password reset in Cognito and return new authentication tokens."""
-    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
-    kwargs = {
-        "ClientId": COGNITO_CLIENT_ID,
-        "Username": username,
-        "ConfirmationCode": code,
-        "Password": new_password
-    }
-    sh = secret_hash(username)
-    if sh:
-        kwargs["SecretHash"] = sh
-    try:
-        client.confirm_forgot_password(**kwargs)
-        return cognito_authenticate(username, new_password)
-    except Exception:
-        return None
-
-
+# ===== Cognito/Django User Helpers =====
 def get_django_user_from_cognito(request):
-    """Return the Django User object corresponding to the Cognito session."""
-    User = get_user_model()
-    cognito_user = request.session.get("cognito_user")
-    if not cognito_user:
-        return None
-    username = cognito_user.get("username")
-    try:
-        return User.objects.get(username=username)
-    except User.DoesNotExist:
-        return None
-
+    class UserObj:
+        def __init__(self, username):
+            self.username = username
+    username = get_cognito_username(request)
+    return UserObj(username) if username else None
 
 def get_cognito_username(request):
-    """Get the Cognito username from the session."""
+    token = request.session.get("cognito_token")
+    if not token:
+        return None
+    try:
+        decoded = jwt.decode(token, options={"verify_signature": False})
+        return decoded.get("username") or decoded.get("cognito:username")
+    except Exception:
+        return None
+
+def get_cognito_username(request):
     user = request.session.get('cognito_user')
     return user.get('username') if user else None
-
 
 def sync_cognito_user_to_django(request):
     """Sync Cognito user session to Django User and set staff/superuser flags."""
@@ -262,7 +205,6 @@ def sync_cognito_user_to_django(request):
     cognito_user = request.session.get("cognito_user")
     if not cognito_user:
         return None
-
     username = cognito_user.get("username")
 
     client = boto3.client('cognito-idp', region_name=COGNITO_REGION)
@@ -283,7 +225,6 @@ def sync_cognito_user_to_django(request):
     login(request, user)
     return user
 
-
 # ===== Decorators =====
 def cognito_login_required(view_func):
     """Decorator to enforce Cognito login for a view."""
@@ -300,14 +241,12 @@ def cognito_group_required(group_name=None):
     """Decorator to enforce Cognito group membership for a view."""
     def decorator(view_func):
         @wraps(view_func)
-        def _wrapped_view(request, *args, **kwargs):
-            user_data = request.session.get("cognito_user")
-            if not user_data or "id_token" not in user_data:
+        def wrapper(request, *args, **kwargs):
+            token = request.session.get("cognito_token")
+            if not token:
                 return redirect("login")
-            if not group_name:
-                return view_func(request, *args, **kwargs)
             try:
-                decoded = jwt.decode(user_data["id_token"], options={"verify_signature": False})
+                decoded = jwt.decode(token, options={"verify_signature": False})
                 groups = decoded.get("cognito:groups", [])
                 if group_name in groups:
                     return view_func(request, *args, **kwargs)
@@ -315,9 +254,95 @@ def cognito_group_required(group_name=None):
                     return redirect("unauthorized")
             except Exception:
                 return redirect("login")
-        return _wrapped_view
+            return view_func(request, *args, **kwargs)
+        return wrapper
     return decorator
 
+def mfa_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.session.get("mfa_verified"):
+            messages.warning(request, "You must complete MFA verification first.")
+            return redirect("mfa_verify")
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+# ===== MFA Views =====
+@cognito_login_required
+def mfa_setup_view(request):
+    username = get_cognito_username(request)
+    if not username:
+        messages.error(request, "You must be logged in to set up MFA.")
+        return redirect("login")
+    secret = cache.get(f"mfa_secret_{username}")
+    if not secret:
+        secret = pyotp.random_base32()
+        cache.set(f"mfa_secret_{username}", secret, timeout=3600)
+    totp = pyotp.TOTP(secret)
+    uri = totp.provisioning_uri(name=username, issuer_name="CAB432App")
+    qr = qrcode.make(uri)
+    buffer = BytesIO()
+    qr.save(buffer, format="PNG")
+    qr_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    buffer.close()
+    return render(request, "mfa_setup.html", {"qr_code": qr_b64})
+
+def mfa_verify_view(request):
+    if request.method == "POST":
+        code = request.POST.get("otp_code")
+        username = request.session.get("username")
+        challenge_name = request.session.get("challenge_name")
+        session = request.session.get("cognito_session")
+        if not code:
+            messages.error(request, "Please enter the MFA code.")
+            return render(request, "mfa_verify.html", {"challenge_type": challenge_name})
+        try:
+            response = client.respond_to_auth_challenge(
+                ClientId=CLIENT_ID,
+                ChallengeName=challenge_name,
+                Session=session,
+                ChallengeResponses={
+                    'USERNAME': username,
+                    'SECRET_HASH': get_secret_hash(username),
+                    'SOFTWARE_TOKEN_MFA_CODE' if challenge_name=="SOFTWARE_TOKEN_MFA" else 'EMAIL_OTP_CODE': code
+                }
+            )
+        except client.exceptions.CodeMismatchException:
+            messages.error(request, "Invalid code. Please try again.")
+            return render(request, "mfa_verify.html", {"challenge_type": challenge_name})
+        except Exception as e:
+            messages.error(request, f"Error: {str(e)}")
+            return render(request, "mfa_verify.html", {"challenge_type": challenge_name})
+        request.session['user'] = username
+        return redirect("home")
+    return render(request, "mfa_verify.html", {"challenge_type": request.session.get("challenge_name")})
+
+
+
+
+def some_view(request):
+    try:
+        tags = test_api_tags()
+    except Exception as e:
+        tags = []
+        print(f"[WARNING] test_api_tags failed: {e}")
+    return render(request, "template.html", {"tags": tags})
+
+# ==================================
+# Main Views
+# ==================================
+
+@cognito_group_required()
+@mfa_required
+def home(request):
+    django_user = get_django_user_from_cognito(request)
+    return render(request, "home.html", {"username": django_user.username if django_user else "Guest"})
+
+
+@cognito_group_required()
+@mfa_required
+def dashboard_view(request):
+    return render(request, "dashboard.html")
 
 # ===== Views ===== 
 
@@ -367,7 +392,6 @@ def confirm_view(request):
         else:
             messages.error(request, "Confirmation failed.")
     return render(request, "confirm.html")
-
 
 @csrf_exempt
 def login_view(request):
@@ -422,11 +446,118 @@ def login_view(request):
                     return redirect("home")
                 else:
                     messages.error(request, "Password reset succeeded, but failed to sync with Django.")
+        try:
+            response = client.initiate_auth(
+                ClientId=CLIENT_ID,
+                AuthFlow='USER_PASSWORD_AUTH',
+                AuthParameters={
+                    'USERNAME': username,
+                    'PASSWORD': password,
+                    'SECRET_HASH': get_secret_hash(username)
+                }
+            )
+        except client.exceptions.NotAuthorizedException:
+            messages.error(request, "Invalid username or password.")
+            return render(request, "login.html")
+        except Exception as e:
+            messages.error(request, f"Error: {str(e)}")
+            return render(request, "login.html")
+
+        # Check if Cognito returned a challenge
+        if response.get("ChallengeName"):
+            challenge = response["ChallengeName"]
+            request.session['cognito_session'] = response["Session"]
+            request.session['username'] = username
+            request.session['challenge_name'] = challenge
+
+            if challenge == "SOFTWARE_TOKEN_MFA":
+                return redirect("mfa_verify")
+            elif challenge == "EMAIL_OTP":
+                return redirect("email_otp_verify")
             else:
-                messages.error(request, "Password reset failed. Check your code and try again.")
+                messages.error(request, f"Unsupported challenge: {challenge}")
+                return render(request, "login.html")
+
+        # No challenge → login successful
+        request.session['user'] = username
+        return redirect("home")
 
     return render(request, "login.html")
 
+
+def mfa_email_post(request):
+    if request.method == "POST":
+        otp_code = request.POST.get("otp")
+        username = request.session.get("cognito_username")
+
+        # Send OTP to Cognito
+        resp = client.respond_to_auth_challenge(
+            ClientId=CLIENT_ID,
+            ChallengeName="EMAIL_OTP",
+            Session=request.session.get("cognito_session"),
+            ChallengeResponses={
+                "USERNAME": username,
+                "SECRET_HASH": get_secret_hash(username),
+                "EMAIL_OTP_CODE": otp_code
+            }
+        )
+
+        # If authentication successful, log the user into Django
+        if "AuthenticationResult" in resp:
+            user, created = User.objects.get_or_create(username=username)
+            login(request, user)  # <--- this is key
+
+            return redirect("home")  # or your home.html URL name
+        
+        messages.error(request, "Invalid OTP")
+        return redirect("mfa_email")
+
+
+def mfa_email(request):
+    if request.method == "POST":
+        otp_code = request.POST.get("otp")
+        username = request.session.get("cognito_username")
+        session_token = request.session.get("cognito_session")
+
+        if not username or not session_token:
+            messages.error(request, "Session expired. Please login again.")
+            return redirect("login")
+
+        try:
+            response = client.respond_to_auth_challenge(
+                ClientId=CLIENT_ID,
+                ChallengeName="EMAIL_OTP",
+                Session=session_token,
+                ChallengeResponses={
+                    "USERNAME": username,
+                    "SECRET_HASH": get_secret_hash(username),
+                    "EMAIL_OTP_CODE": otp_code
+                }
+            )
+
+            if "AuthenticationResult" in response:
+                # Create or get Django user
+                user, created = User.objects.get_or_create(username=username)
+
+                # Log user in
+                login(request, user)
+
+                # Clear session MFA data
+                request.session.pop("cognito_username", None)
+                request.session.pop("cognito_session", None)
+
+                return redirect("home")  # replace with your home URL name
+
+            else:
+                messages.error(request, "MFA failed. Try again.")
+                return redirect("mfa_email")
+
+        except client.exceptions.NotAuthorizedException:
+            messages.error(request, "Invalid OTP or credentials.")
+            return redirect("mfa_email")
+
+    # GET request
+    return render(request, "mfa_email.html")
 
 @csrf_exempt
 def reset_password_confirm_view(request):

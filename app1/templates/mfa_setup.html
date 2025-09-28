@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="relative isolate overflow-hidden bg-gray-900 py-16 sm:py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+        <div class="mx-auto max-w-2xl text-center">
+            <h1 class="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Multi-Factor Authentication Setup
+            </h1>
+            <p class="mt-6 text-lg leading-8 text-gray-300">
+                Scan the QR code with your authenticator app and enter the generated code below to enable MFA.
+            </p>
+
+            {% if messages %}
+                <div class="mt-4">
+                    {% for message in messages %}
+                        <div class="p-2 rounded {{ message.tags }} bg-gray-700 text-white">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="mt-10">
+                {% if qr_code_data %}
+                    <img src="data:image/png;base64,{{ qr_code_data }}" alt="MFA QR Code" class="mx-auto"/>
+                {% endif %}
+            </div>
+
+            <form method="POST" class="mt-8 flex flex-col items-center gap-4">
+                {% csrf_token %}
+                <input type="text" name="mfa_code" placeholder="Enter MFA code"
+                       class="rounded-md px-4 py-2 w-64 text-gray-900"/>
+                <button type="submit"
+                        class="rounded-md bg-indigo-600 px-6 py-3 text-lg font-semibold text-white shadow-sm hover:bg-indigo-500">
+                    Verify & Enable MFA
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

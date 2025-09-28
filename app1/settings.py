@@ -172,6 +172,15 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # ------------------------------
 # Cognito token refresh margin
 # ------------------------------
-COGNITO_TOKEN_REFRESH_MARGIN = 300  # Seconds before expiry to refresh token
+COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-southeast-2")
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "ap-southeast-2_XEtlj9zEG")
+COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "5dmsjn9reflk2l2auq48qr9r1r")
+COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt")
+COGNITO_ADMIN_GROUP = os.environ.get("COGNITO_ADMIN_GROUP", "admin")
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
+
+
+
+
+print(f"[DEBUG] Cognito config loaded: "
+      f"region={COGNITO_REGION}, pool={COGNITO_USER_POOL_ID}, client_id={COGNITO_CLIENT_ID}")
