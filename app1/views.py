@@ -28,6 +28,8 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.urls import reverse
 from django.core.cache import cache
+from django.contrib.auth import login
+
 
 from app1.models import TaskProgress, Resume, JobApplication
 from app1.api_cache import test_api_tags
