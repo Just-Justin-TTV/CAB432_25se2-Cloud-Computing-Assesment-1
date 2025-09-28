@@ -5,17 +5,19 @@ import io
 import time
 import base64
 import hmac
+import logging
 from functools import wraps
 from uuid import uuid4
-import logging
+from decimal import Decimal
+import datetime
 
+import requests
+import jwt
 import boto3
 from botocore.exceptions import ClientError
-import jwt
-import requests
 from docx import Document
 from PyPDF2 import PdfReader
-from app1.models import TaskProgress
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login as django_login, get_user_model
@@ -24,26 +26,29 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.http import JsonResponse
 from django.conf import settings
-from django.contrib.auth import login
-import datetime
-from django.core.cache import cache
-from .dynamo_utils import save_progress, load_progress, update_progress_smoothly, process_resume_chunks
 from django.urls import reverse
-from .dynamo_utils import display_progress
-from decimal import Decimal
-response = requests.get(f"{settings.OLLAMA_URL}/api/tags")
-import os
-import logging
-import datetime
-import requests
-from django.core.cache import cache
-import requests
-import logging
 from django.core.cache import cache
 
+from app1.models import TaskProgress, Resume, JobApplication
+from app1.api_cache import test_api_tags
+from .dynamo_utils import (
+    save_progress,
+    load_progress,
+    update_progress_smoothly,
+    process_resume_chunks,
+    display_progress
+)
+from . import s3_utils
+
+# ===== Ollama Tags / Cache =====
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
+
+# Example: initial request to Ollama API
+response = requests.get(f"{OLLAMA_URL}/api/tags")
+
+# Logger
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
 
 # ===== Ollama Tags / Cache =====
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")

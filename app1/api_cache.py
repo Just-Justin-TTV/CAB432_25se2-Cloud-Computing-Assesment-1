@@ -5,22 +5,32 @@ import requests
 
 def get_api_tags():
     """
-    Fetch available API tags from Ollama.
-    Uses Django cache to avoid repeated requests.
+    Fetch available Ollama API tags, using Memcached (AWS ElastiCache) for caching.
     """
-    tags = cache.get("api_tags")
+    cache_key = "api_tags"
+    now = datetime.datetime.now().isoformat()
+
+    # Try fetching from cache first
+    tags = cache.get(cache_key)
     if tags:
+        logger.debug(f"[{now}] [CACHE HIT] Returning cached tags: {tags}")
         return tags
 
-    url = f"{settings.OLLAMA_HOST}/api/tags"
+    # Cache miss: fetch from Ollama API
+    logger.debug(f"[{now}] [CACHE MISS] Fetching from Ollama...")
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
         response.raise_for_status()
         tags = response.json()
-        cache.set("api_tags", tags, timeout=300)  # cache for 5 mins
+
+        # Store in cache for 5 minutes
+        cache.set(cache_key, tags, timeout=300)
+        logger.debug(f"[{now}] [CACHE SET] Cached tags for 5 min")
         return tags
-    except requests.RequestException:
-        return []
+
+    except requests.RequestException as e:
+        logger.error(f"[{now}] [ERROR] Failed to fetch tags from Ollama: {e}")
+        return {"models": []}
 
 
 def test_api_tags():
