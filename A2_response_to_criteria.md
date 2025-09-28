@@ -33,7 +33,7 @@ Overview
 - **Why is are the other services used not suitable for this data?:** RDS: Designed for structured data, not large files and the same with 
                                                                       DynamoDB as its optimised for key-value and document data, but not for large binary files.
 - **Bucket/instance/table name:** justinsinghatwalbucket, resumes/ - storing resumes feedback/ - storing ai generated feedback
-- **Video timestamp:**
+- **Video timestamp:** 00:00 - 00:30
 - **Relevant files:**
     -   views.py – manages file uploads and AI processing, upload_resume(request), 
     -   settings.py – stores AWS credentials and bucket info
@@ -54,7 +54,7 @@ Overview
                                                                       DynamoDB: Optimized for key-value/document data, not relational tables with complex queries.  
 - **Bucket/instance/table name:**   cohort_2025 - db name, auth_user – user credentials, app1_resume – S3 file paths for resumes, 
                                     app1_jobapplication – AI feedback and job matching results
-- **Video timestamp:**
+- **Video timestamp:** 00:31 - 00:52
 - **Relevant files:**
     -   views.py – updates and retrieves database records, upload_resume(request), update_job_application(request, application_id), get_user_applications(request)
     -   models.py – defines database tables and relationships, Resume, JobApplication, User
@@ -74,7 +74,7 @@ Overview
                                                                       S3: Cannot handle structured, rapidly changing metadata.
 - **Bucket/instance/table name:**  n11605618dynamo - table name, username - users username, task_name - current task, progress - ai progress
                                    updated_at - date which last update occurred 
-- **Video timestamp:**
+- **Video timestamp:** 00:53 - 01:38
 - **Relevant files:**
     -   views.py – updates task progress during AI processing, start_ai_task(request, resume_id), update_ai_progress(task_id, progress), get_task_progress(task_id)
     -   match.html – triggers AI processing and updates progress, JS triggers start_ai_task and periodically calls get_task_progress upload.html
@@ -84,7 +84,7 @@ Overview
 ### S3 Pre-signed URLs
 
 - **S3 Bucket names:**  justinsinghatwalbucket
-- **Video timestamp:**
+- **Video timestamp:** 01:39 - 02:21
 - **Relevant files:**   
     -   views.py – generates pre-signed URLs for download, download_resume(request, resume_id), download_feedback(request, application_id)
     -   s3_utils.py – helper functions to create pre-signed URLs, generate_presigned_url(bucket_name, key, expiration=3600)
@@ -98,7 +98,7 @@ Overview
 - **What data is being cached?:** Requests and responses from the Ollama AI server, including AI match results and temporary computation data.
 - **Why is this data likely to be accessed frequently?:** Multiple users may request AI matches or view previously processed resumes,
                                                           so caching reduces repeated processing and improves response speed.
-- **Video timestamp:**
+- **Video timestamp:** 02:22 - 02:59
 - **Relevant files:**
     -   views.py – interacts with Memcached to cache AI results, get_ai_result(request, application_id), cache_ai_result(application_id, result),
     -   match.html – retrieves cached AI results for faster display
@@ -135,7 +135,7 @@ Overview
 
 - **User pool name:** n12008192_assessment2_group8
 - **How are authentication tokens handled by the client?:** Upon login, Cognito issues authentication tokens that the client stores locally and includes in the Authorization header for API requests.
-- **Video timestamp:**
+- **Video timestamp:** 03:00 - 04:27
 - **Relevant files:** views.py, urls.py, settings.py, register.html, login.html, forms.py
     -
 
@@ -156,26 +156,26 @@ Overview
 ### Cognito groups
 
 - **How are groups used to set permissions?:** Users in the admin group have elevated privileges. Admin has a specical dashboard where admin can view the uploaded resumes by the user, download it, view feedbacks, while users in the user group have standard access rights.
-- **Video timestamp:**
+- **Video timestamp:** 04:28 - 05:35
 - **Relevant files:** views.py, urls.py
     -
 
 ### Core - DNS with Route53
 
 - **Subdomain**:  http://justinsinghatwal.cab432.com/
-- **Video timestamp:**
+- **Video timestamp:** 05:36 - 06:28
 
 ### Parameter store
 
 - **Parameter names:** /n12008192/assessment2/COGNITO_CLIENT_ID, /n12008192/assessment2/COGNITO_CLIENT_SECRET
-- **Video timestamp:**
+- **Video timestamp:** 06:29 - 07:19
 - **Relevant files:** settings.py, views.py
     -
 
 ### Secrets manager
 
 - **Secrets names:** n11605618-a2RDSecret
-- **Video timestamp:**
+- **Video timestamp:** 07:20 - 07:59
 - **Relevant files:** settings.py, docker-compose.yml
     -
 
