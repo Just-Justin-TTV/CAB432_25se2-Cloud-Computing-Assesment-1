@@ -146,6 +146,22 @@ def cognito_authenticate(username, password):
         pass
     return None
 
+def cognito_signup(username, password, email):
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    kwargs = {
+        "ClientId": COGNITO_CLIENT_ID,
+        "Username": username,
+        "Password": password,
+        "UserAttributes": [{"Name": "email", "Value": email}]
+    }
+    sh = secret_hash(username)
+    if sh:
+        kwargs["SecretHash"] = sh
+    try:
+        return client.sign_up(**kwargs)
+    except Exception as e:
+        print(f"[ERROR] Cognito sign-up failed: {e}")
+        return None
 
 def cognito_confirm_signup(username, confirmation_code):
     """Confirm a new Cognito user signup with a confirmation code."""
