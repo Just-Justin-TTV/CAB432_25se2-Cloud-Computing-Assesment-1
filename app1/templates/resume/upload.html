@@ -1,67 +1,209 @@
-{% extends "base.html" %}
-
-{% block content %}
-<!-- Resume Upload Page: allows users to upload a resume and proceed to job matching -->
-<div style="max-width: 600px; margin: 30px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9;">
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Match Resume to Job</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+<div class="container mx-auto mt-8 p-4">
 
     <!-- Page heading -->
-    <h2 style="text-align:center; margin-bottom: 20px;">Upload Your Resume</h2>
+    <h2 class="text-2xl font-bold mb-6 text-gray-800">Match Resume to Job</h2>
 
-    <!-- File input for uploading resume -->
-    <div style="text-align:center; margin-bottom: 20px;">
-        <input type="file" id="resumeInput" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc;" />
+    <!-- Display selected resume details if available -->
+    {% if resume %}
+        <div class="mb-4 p-4 bg-white rounded shadow">
+            <p><strong>Candidate Name:</strong> {{ resume.candidate_name }}</p>
+            <p>
+                <strong>Resume:</strong>
+                {% if resume.s3_file_path %}
+                    <a href="{{ resume.s3_file_path }}" download="{{ resume.candidate_name }}_resume" class="text-blue-600 underline">
+                        Download Resume
+                    </a>
+                {% else %}
+                    Not available
+                {% endif %}
+            </p>
+            <p><strong>Uploaded At:</strong> {{ resume.uploaded_at }}</p>
+        </div>
+    {% else %}
+        <p class="mb-4 text-gray-600">No resume selected.</p>
+    {% endif %}
+
+    <!-- Form to input job position for AI matching -->
+    <form method="post" id="resume-form" class="mb-6 bg-white p-4 rounded shadow">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="job_position" class="block font-medium text-gray-700">Job Position</label>
+            <input type="text" id="job_position" name="job_position"
+                   class="mt-1 block w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                   placeholder="e.g. Data Analyst" required>
+        </div>
+        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Check AI Match</button>
+    </form>
+
+    <!-- Progress bar for AI processing -->
+    <div class="mb-6">
+        <label class="block font-medium text-gray-700 mb-1">AI Generation Progress</label>
+        <div class="relative w-full bg-gray-300 rounded h-6 overflow-hidden">
+            <div id="progress-bar" class="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-green-600 animate-pulse text-center text-white font-bold" style="width: {{ progress|default:0 }}%;">
+                {{ progress|default:0 }}%
+            </div>
+        </div>
     </div>
 
-    <!-- Action buttons shown after successful upload -->
+    <!-- Container for displaying AI match results -->
+    <div class="match-result mt-3 bg-white p-4 rounded shadow" id="match-result">
+        <p class="text-gray-600">No match data available yet.</p>
+    </div>
+
+    <!-- Buttons for download & next step -->
     <div id="uploadOptions" style="display:none; margin-top:20px; text-align:center;">
-        <a id="downloadBtn" href="#" class="btn btn-primary" target="_blank" style="margin: 10px; padding: 12px 25px; font-size: 16px; border-radius: 6px;">Download Resume</a>
-        <a id="matchBtn" href="#" class="btn btn-success" style="margin: 10px; padding: 12px 25px; font-size: 16px; border-radius: 6px;">Next: Select Job</a>
+        <a id="downloadBtn" href="#" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition mr-2" target="_blank">
+            Download Resume
+        </a>
+        <button id="matchBtn" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+            Next: Select Job
+        </button>
     </div>
+
 </div>
 
 <script>
-// Handle resume file selection and upload process
-document.getElementById("resumeInput").addEventListener("change", async (e) => {
+// ================================
+// MOCK /api/tags endpoint
+// ================================
+(function() {
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+        if (url.endsWith("/api/tags")) {
+            console.log("Mocking /api/tags request");
+            const fakeData = [
+                { id: 1, name: "Python" },
+                { id: 2, name: "AWS" },
+                { id: 3, name: "Networking" },
+                { id: 4, name: "Data Science" }
+            ];
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve(new Response(JSON.stringify(fakeData), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" }
+                    }));
+                }, 200);
+            });
+        }
+        return originalFetch(url, options);
+    };
+})();
+
+// ================================
+// Handle resume file upload
+// ================================
+document.getElementById("resumeInput")?.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     try {
-        // Request a presigned URL from the server for secure S3 upload
         const presignRes = await fetch("/resume/get_presigned_url/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: file.name, content_type: file.type })
         });
         const { url, key } = await presignRes.json();
-        if (!url) throw new Error("Failed to get presigned URL");
 
-        // Upload the file directly to S3 using the presigned URL
-        const uploadRes = await fetch(url, {
-            method: "PUT",
-            headers: { "Content-Type": file.type },
-            body: file
-        });
-        if (!uploadRes.ok) throw new Error("Upload failed");
+        await fetch(url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
 
-        // Confirm the upload with the server and get download/match URLs
         const confirmRes = await fetch("/resume/confirm_upload/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ key })
         });
         const confirmData = await confirmRes.json();
-        if (!confirmData.success) throw new Error("Confirm upload failed");
 
-        // Show download and next action buttons
-        const downloadBtn = document.getElementById("downloadBtn");
-        const matchBtn = document.getElementById("matchBtn");
-        downloadBtn.href = confirmData.download_url;
-        matchBtn.href = confirmData.match_url;
+        document.getElementById("downloadBtn").href = confirmData.download_url;
+        document.getElementById("matchBtn").dataset.matchUrl = confirmData.match_url;
         document.getElementById("uploadOptions").style.display = "block";
 
     } catch (err) {
-        // Handle errors silently or with in-page messaging (optional)
+        console.error("Upload error:", err);
     }
 });
+
+// ================================
+// Match button sends POST to backend
+// ================================
+document.getElementById("matchBtn")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const btn = e.target;
+    const matchUrl = btn.dataset.matchUrl;
+    if (!matchUrl) return;
+
+    await fetch(matchUrl, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({ job_position: document.getElementById("job_position")?.value || "" })
+    });
+
+    // redirect to the match page or show results
+    window.location.href = matchUrl;
+});
+
+// ================================
+// AI progress bar logic
+// ================================
+function fetchProgress() {
+    fetch("{{ task_progress_url }}")
+        .then(res => res.json())
+        .then(data => {
+            const bar = document.getElementById("progress-bar");
+            const progress = data.progress !== undefined ? data.progress : 0;
+            bar.style.width = progress + "%";
+            bar.innerText = Math.round(progress) + "%";
+
+            if (progress >= 100 && data.result && Object.keys(data.result).length > 0) {
+                const resultDiv = document.getElementById("match-result");
+                const score = data.result.score ? Math.round(data.result.score) : "N/A";
+                const feedback = data.result.feedback || "No feedback available.";
+                resultDiv.innerHTML = `
+                    <p><strong>Match Score:</strong> ${score}%</p>
+                    <p><strong>AI Feedback:</strong></p>
+                    <div class="feedback border p-3 bg-gray-50 rounded">
+                        ${feedback.replace(/\n/g, "<br>")}
+                    </div>
+                    <button id="download-feedback-btn" class="mt-3 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                        Download Feedback
+                    </button>
+                `;
+
+                const btn = document.getElementById("download-feedback-btn");
+                btn.addEventListener("click", () => {
+                    const blob = new Blob([feedback], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "{{ resume.candidate_name|default:'AI_Feedback' }}_feedback.txt";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+
+                bar.classList.remove("animate-pulse");
+                bar.classList.add("bg-green-600");
+            }
+        });
+}
+
+{% if task_progress_url %}
+    setInterval(fetchProgress, 1000);
+{% endif %}
 </script>
-{% endblock %}
+</body>
+</html>

@@ -500,25 +500,7 @@ def dashboard_view(request):
     })
 
 
-def process_resume_matching(username: str, resumes: list):
-    """Process multiple resumes sequentially and track progress."""
-    if not username or not resumes:
-        return False
 
-    total_resumes = len(resumes)
-    task_name = "resume_matching"
-
-    for i, resume in enumerate(resumes, start=1):
-        try:
-            time.sleep(0.1)
-        except Exception as e:
-            logging.error(f"Failed to process resume {i}: {e}")
-
-        progress = Decimal(str(i / total_resumes * 100))
-        safe_save_progress(username, task_name, progress)
-
-    safe_save_progress(username, task_name, Decimal("100"))
-    return True
 
 
 def get_resume_progress(request):
@@ -532,7 +514,7 @@ def get_resume_progress(request):
     return JsonResponse({'progress': progress})
 
 
-def get_progress(username: str, task_name: str):
+def get_progress(request, username: str, task_name: str):
     """Return the current progress for a given username and task."""
     if not username:
         return 0
@@ -564,29 +546,32 @@ def update_progress(username: str, task_name: str, increment: float = 1.0):
 
 # ===== Resume Helpers =====
 
-def read_resume_text(resume):
-    """Read the text content from a resume file (.txt, .docx, .pdf) stored on S3."""
-    text = ""
-    if not resume.s3_file_path:
-        return text
-    resp = requests.get(resume.s3_file_path)
-    file_bytes = resp.content
-    ext = os.path.splitext(resume.s3_file_path)[1].lower()
+def match_resume_to_job(request, resume_id):
+    """
+    Trigger the resume-to-job matching process in Dev B.
+    Returns a task ID immediately so the frontend can poll progress.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+    user = request.user.username
+    task_id = str(uuid.uuid4())  # unique task identifier
+
+    # Send request to Dev B API
+    dev_b_url = "http://localhost:8000/mock/devb/start/"
+    payload = {
+        "task_id": task_id,
+        "username": user,
+        "resume_id": resume_id
+    }
+
     try:
-        if ext == ".txt":
-            text = file_bytes.decode('utf-8', errors='ignore')
-        elif ext == ".docx":
-            doc = Document(io.BytesIO(file_bytes))
-            text = "\n".join([p.text for p in doc.paragraphs])
-        elif ext == ".pdf":
-            reader = PdfReader(io.BytesIO(file_bytes))
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-    except Exception as e:
-        logging.error(f"Failed to read resume: {e}")
-    return text
+        # Fire-and-forget trigger; you can also use Celery/RabbitMQ for async
+        requests.post(dev_b_url, json=payload, timeout=5)
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({"error": f"Failed to trigger Dev B: {str(e)}"}, status=500)
+
+    return JsonResponse({"task_id": task_id, "status": "started"})
 
 
 # ===== Resume Upload / Confirm =====
@@ -660,106 +645,10 @@ def download_file(request):
 
 # ===== Ollama / AI Matching =====
 
-def call_ollama(payload, retries=10, delay=3):
-    """
-    Send a request to the Ollama API with retries and return the JSON response.
-    """
-    url = f"{os.environ.get('OLLAMA_HOST', 'http://cab432-ollama:11434')}/api/generate"
-    for attempt in range(retries):
-        try:
-            response = requests.post(url, json=payload, timeout=600)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            if attempt < retries - 1:
-                time.sleep(delay)
-            else:
-                raise e
 
 
-@csrf_exempt
-@cognito_login_required
-def match_resume_to_job(request, resume_id):
-    """
-    Handle a resume-to-job matching request using AI evaluation and track progress.
-    Saves feedback to S3 and records results in JobApplication.
-    """
-    django_user = get_django_user_from_cognito(request)
-    if not django_user:
-        messages.error(request, "User not found.")
-        return redirect("login")
 
-    resume = get_object_or_404(Resume, id=resume_id, user=django_user)
-    task_name = f"match_resume_{resume.id}"
 
-    progress = load_progress(django_user.username, task_name) or Decimal("0")
-    task_progress_url = reverse('task_progress_api', kwargs={'task_name': task_name})
-
-    if request.method == "POST":
-        job_position = request.POST.get("job_position")
-        if not job_position:
-            messages.error(request, "Please enter a job position.")
-            return redirect("match_resume_to_job", resume_id=resume.id)
-
-        try:
-            safe_save_progress(django_user.username, task_name, Decimal("10"))
-            resume_text = read_resume_text(resume)
-            safe_save_progress(django_user.username, task_name, Decimal("25"))
-
-            prompt = f"""
-            You are a highly intelligent assistant that evaluates resumes against job positions in extreme detail.
-            Job Position: {job_position}
-            Resume Text: {resume_text}
-            
-            Return JSON with keys: score, feedback
-            """
-            payload = {"model": "mistral", "prompt": prompt, "stream": False}
-            safe_save_progress(django_user.username, task_name, Decimal("40"))
-
-            response = call_ollama(payload)
-            safe_save_progress(django_user.username, task_name, Decimal("70"))
-
-            ai_text = response.get("response", "")
-            score, feedback = 50, ""
-            if ai_text:
-                try:
-                    parsed = json.loads(re.search(r"\{.*\}", ai_text, re.DOTALL).group(0))
-                    score = parsed.get("score", 50)
-                    feedback = parsed.get("feedback", "")
-                    feedback = json.dumps(feedback, indent=4) if isinstance(feedback, dict) else str(feedback)
-                except Exception as parse_err:
-                    logging.error(f"AI parsing error: {parse_err}")
-                    feedback = ai_text
-
-            key = f"feedback/{django_user.username}/{uuid4()}_resume_{resume.id}_feedback.txt"
-            feedback_s3_url = s3_utils.upload_file_to_s3(feedback.encode('utf-8'), key)
-            safe_save_progress(django_user.username, task_name, Decimal("90"))
-
-            JobApplication.objects.create(
-                user=django_user,
-                resume=resume,
-                job_description=job_position,
-                ai_model="mistral",
-                score=float(score)/100.0,
-                status="completed",
-                feedback=feedback,
-                feedback_s3_url=feedback_s3_url
-            )
-
-            safe_save_progress(django_user.username, task_name, Decimal("100"))
-            messages.success(request, f"Match analysis complete! Score: {score}")
-            return redirect("dashboard")
-
-        except Exception as e:
-            logging.error(f"[ERROR] AI processing failed: {e}")
-            messages.error(request, f"AI processing failed: {e}")
-            return redirect("match_resume_to_job", resume_id=resume.id)
-
-    return render(request, "resume/match.html", {
-        "resume": resume,
-        "progress": progress,
-        "task_progress_url": task_progress_url,
-    })
 
 
 @cognito_login_required

@@ -62,11 +62,39 @@
 </div>
 
 <script>
-/**
- * fetchProgress
- * Fetches the current AI processing progress and updates the progress bar.
- * If the process is complete, displays the match score and AI feedback with download option.
- */
+// ================================
+// MOCK /api/tags endpoint
+// ================================
+(function() {
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+        if (url.endsWith("/api/tags")) {
+            console.log("Mocking /api/tags request");
+
+            const fakeData = [
+                { id: 1, name: "Python" },
+                { id: 2, name: "AWS" },
+                { id: 3, name: "Networking" },
+                { id: 4, name: "Data Science" }
+            ];
+
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve(new Response(JSON.stringify(fakeData), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" }
+                    }));
+                }, 200); // simulate network delay
+            });
+        }
+
+        return originalFetch(url, options);
+    };
+})();
+
+// ================================
+// AI progress bar and result logic
+// ================================
 function fetchProgress() {
     fetch("{{ task_progress_url }}")
         .then(res => res.json())
@@ -76,7 +104,6 @@ function fetchProgress() {
             bar.style.width = progress + "%";
             bar.innerText = Math.round(progress) + "%";
 
-            // Display result when AI task is complete
             if (progress >= 100 && data.result && Object.keys(data.result).length > 0) {
                 const resultDiv = document.getElementById("match-result");
                 const score = data.result.score ? Math.round(data.result.score) : "N/A";
@@ -93,7 +120,6 @@ function fetchProgress() {
                     </button>
                 `;
 
-                // Add download functionality for feedback
                 const btn = document.getElementById("download-feedback-btn");
                 btn.addEventListener("click", () => {
                     const blob = new Blob([feedback], { type: "text/plain" });
@@ -107,14 +133,12 @@ function fetchProgress() {
                     URL.revokeObjectURL(url);
                 });
 
-                // Stop progress animation once complete
                 bar.classList.remove("animate-pulse");
                 bar.classList.add("bg-green-600");
             }
         });
 }
 
-// Poll the progress endpoint every 1 second if URL is provided
 {% if task_progress_url %}
     setInterval(fetchProgress, 1000);
 {% endif %}
