@@ -1,6 +1,24 @@
 version: '3.9'
 
 services:
+  ollama:
+    build:
+      context: ./ollama
+      dockerfile: Dockerfile
+    container_name: cab432-ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+    command: sh -c "ollama serve"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 5s
+      retries: 12
+
   web:
     build:
       context: .
@@ -11,24 +29,36 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    command: ["/code/entrypoint.sh"]
     environment:
+      # Database
       DB_HOST: ${DB_HOST}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_PORT: ${DB_PORT}
       DB_SSLMODE: ${DB_SSLMODE}
+
+      # S3
       USE_S3: "True"
       AWS_PROFILE: "CAB432-STUDENT"
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
       OLLAMA_URL: "http://ollama:11434"
+
+      # Cognito
       COGNITO_USER_POOL_ID: "ap-southeast-2_XEtlj9zEG"
       COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
       COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
       COGNITO_REGION: "ap-southeast-2"
+
+      # Cache (AWS ElastiCache only)
       CACHE_HOST: "n11605618-ollama-memcached.km2jzi.cfg.apse2.cache.amazonaws.com"
       CACHE_PORT: "11211"
+
     volumes:
       - ./code:/code
       - /home/ubuntu/.aws:/root/.aws:ro
+
+volumes:
+  ollama_data:
