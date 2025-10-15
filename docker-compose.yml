@@ -57,7 +57,7 @@ services:
       CACHE_PORT: "11211"
 
     volumes:
-      #- ./code:/code
+      - ./:/code
       - /home/ubuntu/.aws:/root/.aws:ro
 
 volumes:
