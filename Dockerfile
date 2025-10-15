@@ -22,10 +22,12 @@ COPY requirements.txt /code/
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the project code directory
-COPY code/ /code/
+# Copy the entire project (including entrypoint.sh)
+COPY . /code/
 
 # Make entrypoint.sh executable
 RUN chmod +x /code/entrypoint.sh
+
 
 
 # Set environment variables
