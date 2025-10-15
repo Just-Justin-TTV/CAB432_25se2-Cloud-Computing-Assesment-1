@@ -29,7 +29,8 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-    command: ["/code/entrypoint.sh"]
+    command: tail -f /dev/null
+
     environment:
       # Database
       DB_HOST: ${DB_HOST}
