@@ -1,7 +1,6 @@
 # Base image
 FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /code
 
 # Install system dependencies
@@ -15,17 +14,17 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python dependencies first (for caching)
+# Copy requirements first for caching
 COPY requirements.txt /code/
 
-# Install Python dependencies
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy the entire project
+# Copy the rest of the code
 COPY . /code/
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Optionally, set a default command
+# Default: keep container alive headless
+CMD ["tail", "-f", "/dev/null"]
+# Or run Django directly:
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
