@@ -28,3 +28,8 @@ COPY . /code/
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
+# Ensure entrypoint.sh is executable
+RUN chmod +x /code/entrypoint.sh
+
+# Set the entrypoint
+ENTRYPOINT ["/code/entrypoint.sh"]
