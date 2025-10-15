@@ -62,7 +62,7 @@ services:
       
 
     volumes:
-      #- .:/code
+      - .:/code
       - /home/ubuntu/.aws:/root/.aws:ro
 
 volumes:
