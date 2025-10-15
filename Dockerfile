@@ -21,17 +21,11 @@ COPY requirements.txt /code/
 # Install Python dependencies
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy the project code directory
-# Copy the entire project (including entrypoint.sh)
+# Copy the entire project
 COPY . /code/
-
-# Make entrypoint.sh executable
-RUN chmod +x /code/entrypoint.sh
-
-
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Set the entrypoint
-ENTRYPOINT ["/code/entrypoint.sh"]
+# Optionally, set a default command
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
