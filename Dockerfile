@@ -15,19 +15,21 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
+# Copy Python dependencies first (caching layer)
 COPY requirements.txt /code/
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy entrypoint.sh **explicitly** and make it executable
-COPY code/entrypoint.sh /code/entrypoint.sh
-RUN chmod +x /code/entrypoint.sh
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the project
+# Copy the entire project, including entrypoint.sh
 COPY code/ /code/
+
+# Make entrypoint.sh executable
+RUN chmod +x /code/entrypoint.sh
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Set entrypoint
+# Set the entrypoint
 ENTRYPOINT ["/code/entrypoint.sh"]
