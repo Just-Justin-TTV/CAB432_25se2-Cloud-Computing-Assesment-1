@@ -23,43 +23,28 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: CAB432-web
+    container_name: cab432-web
     depends_on:
       ollama:
         condition: service_healthy
     ports:
       - "8000:8000"
-    command: tail -f /dev/null
-
     environment:
-      # Database
       DB_HOST: ${DB_HOST}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_PORT: ${DB_PORT}
       DB_SSLMODE: ${DB_SSLMODE}
-
-      # S3
       USE_S3: "True"
       AWS_PROFILE: "CAB432-STUDENT"
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
       OLLAMA_URL: "http://ollama:11434"
-
-      # Cognito
-      COGNITO_USER_POOL_ID: "ap-southeast-2_XEtlj9zEG"
-      COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
-      COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
-      COGNITO_REGION: "ap-southeast-2"
-
-      # Cache (AWS ElastiCache only)
-      CACHE_HOST: "n11605618-ollama-memcached.km2jzi.cfg.apse2.cache.amazonaws.com"
-      CACHE_PORT: "11211"
-
     volumes:
       - ./:/code
       - /home/ubuntu/.aws:/root/.aws:ro
+    command: tail -f /dev/null
 
 volumes:
   ollama_data:
