@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from app1 import views
+from django.http import HttpResponse
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -24,6 +25,7 @@ urlpatterns = [
     path('resume/get_presigned_url/', views.get_presigned_url, name='get_presigned_url'),
     path('resume/confirm_upload/', views.confirm_upload, name='confirm_upload'),
     path('resume/download_file/', views.download_file, name='download_file'),  # <--- added
+    path('health', lambda request: HttpResponse("OK", status=200)),
 
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),
