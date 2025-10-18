@@ -1,8 +1,8 @@
-from django import forms 
+from django import forms
 
 class ResumeUploadForm(forms.Form):
     """
-    Form for uploading a resume file.
+    Form for uploading a resume file (stored locally).
     """
     resume_file = forms.FileField(
         required=True,
