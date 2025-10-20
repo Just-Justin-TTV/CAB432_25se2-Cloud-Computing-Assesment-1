@@ -61,23 +61,87 @@
     </div>
 </div>
 
-<button id="simulateBtn">Simulate Resume Upload</button>
-
 <script>
-document.getElementById("simulateBtn").addEventListener("click", async () => {
-    try {
-        const response = await fetch("/simulate-upload/");
-        const data = await response.json();
+// ================================
+// MOCK /api/tags endpoint
+// ================================
+(function() {
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+        if (url.endsWith("/api/tags")) {
+            console.log("Mocking /api/tags request");
 
-        console.log("Simulation result:", data);
-        alert("Simulated upload complete: " + data.file_name);
-        // You can also update your UI like download/match buttons here
-    } catch (err) {
-        console.error("Simulation error:", err);
-        alert("Simulation failed. Check console.");
-    }
-});
+            const fakeData = [
+                { id: 1, name: "Python" },
+                { id: 2, name: "AWS" },
+                { id: 3, name: "Networking" },
+                { id: 4, name: "Data Science" }
+            ];
+
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve(new Response(JSON.stringify(fakeData), {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" }
+                    }));
+                }, 200); // simulate network delay
+            });
+        }
+
+        return originalFetch(url, options);
+    };
+})();
+
+// ================================
+// AI progress bar and result logic
+// ================================
+function fetchProgress() {
+    fetch("{{ task_progress_url }}")
+        .then(res => res.json())
+        .then(data => {
+            const bar = document.getElementById("progress-bar");
+            const progress = data.progress !== undefined ? data.progress : 0;
+            bar.style.width = progress + "%";
+            bar.innerText = Math.round(progress) + "%";
+
+            if (progress >= 100 && data.result && Object.keys(data.result).length > 0) {
+                const resultDiv = document.getElementById("match-result");
+                const score = data.result.score ? Math.round(data.result.score) : "N/A";
+                const feedback = data.result.feedback || "No feedback available.";
+                resultDiv.innerHTML = `
+                    <p><strong>Match Score:</strong> ${score}%</p>
+                    <p><strong>AI Feedback:</strong></p>
+                    <div class="feedback border p-3 bg-gray-50 rounded" id="feedback-text">
+                        ${feedback.replace(/\n/g, "<br>")}
+                    </div>
+                    <button id="download-feedback-btn" 
+                            class="mt-3 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                        Download Feedback
+                    </button>
+                `;
+
+                const btn = document.getElementById("download-feedback-btn");
+                btn.addEventListener("click", () => {
+                    const blob = new Blob([feedback], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "{{ resume.candidate_name|default:'AI_Feedback' }}_feedback.txt";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+
+                bar.classList.remove("animate-pulse");
+                bar.classList.add("bg-green-600");
+            }
+        });
+}
+
+{% if task_progress_url %}
+    setInterval(fetchProgress, 1000);
+{% endif %}
 </script>
-
 </body>
 </html>
