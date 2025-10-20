@@ -54,23 +54,46 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 # Logger
 logger = logging.getLogger(__name__)
 
+@csrf_exempt
 def simulate_resume_upload(request):
     """
-    Simulates a resume upload and runs the existing processing logic.
+    Simulates a resume upload and runs the real processing using Ollama.
     """
+    from django.conf import settings
+    import os
+    from decimal import Decimal
+    from .cpu_utils import match_resume_to_job  # use your existing function
+
     test_file_path = os.path.join(settings.BASE_DIR, "test_resumes", "TestResume.pdf")
+    username = request.user.username if request.user.is_authenticated else "guest"
+    job_position = "Software Engineer"  # or pick dynamically
 
-    # Call your existing processing function
-    from .resume_processing import process_resume  # adjust import
-    result = process_resume(test_file_path)  # could be a dict with match info, etc.
+    try:
+        # Call the actual processing function that reads the file, calls Ollama, and saves feedback
+        score, feedback_file = match_resume_to_job(username, test_file_path, job_position)
 
-    # Return a JSON response to simulate front-end consumption
-    return JsonResponse({
-        "status": "success",
-        "file_name": "TestResume.pdf",
-        "match_result": result,  # whatever your process_resume returns
-        "download_url": "/static/test_resumes/TestResume.pdf"  # optional
-    })
+        # Read the feedback text from the file to return it
+        with open(feedback_file, "r", encoding="utf-8") as f:
+            feedback_text = f.read()
+
+        result = {
+            "score": score,
+            "feedback": feedback_text
+        }
+
+        return JsonResponse({
+            "status": "success",
+            "file_name": "TestResume.pdf",
+            "match_result": result,
+            "download_url": f"/static/test_resumes/TestResume.pdf"
+        })
+
+    except Exception as e:
+        import logging
+        logging.error(f"Simulation failed: {e}")
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
 
 
 def test_ollama_connection():

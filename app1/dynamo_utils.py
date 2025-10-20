@@ -1,14 +1,14 @@
-import boto3 
-from botocore.exceptions import ClientError
-from datetime import datetime, timezone
-from decimal import Decimal
+import os
+import json
 import time
+from decimal import Decimal
 
-# Initialize DynamoDB
-dynamodb = boto3.resource("dynamodb", region_name="ap-southeast-2")
-table = dynamodb.Table("n11605618dynamo")
+# Directory to store local progress files
+PROGRESS_DIR = "progress"
+os.makedirs(PROGRESS_DIR, exist_ok=True)
 
 
+# ===== Progress Helpers =====
 def display_progress(progress_value):
     """
     Convert a numeric progress value to an integer percentage.
@@ -19,41 +19,35 @@ def display_progress(progress_value):
         return 0
 
 
-def save_progress(username: str, task_name: str, progress_value):
+def save_progress(username, task_name, value):
     """
-    Save a user's task progress to DynamoDB.
+    Save progress to a local JSON file.
     """
-    if not username or progress_value is None:
-        raise ValueError("Username and progress value must be provided")
-
-    try:
-        table.put_item(
-            Item={
-                "username": str(username),
-                "task_name": str(task_name),
-                "progress": Decimal(str(progress_value)),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-        )
-        return True
-    except ClientError:
-        return False
+    path = os.path.join(PROGRESS_DIR, f"{username}_{task_name}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"progress": float(value)}, f)
 
 
-def load_progress(username: str, task_name: str):
+def load_progress(username, task_name):
     """
-    Retrieve a user's task progress from DynamoDB.
-    Returns 0 if not found or on error.
+    Load progress from a local JSON file.
     """
-    if not username or not task_name:
-        raise ValueError("Username and task_name must be provided")
-    
-    try:
-        response = table.get_item(Key={'username': username, 'task_name': task_name})
-        item = response.get('Item', {})
-        return float(item.get('progress', 0))
-    except ClientError:
-        return 0
+    path = os.path.join(PROGRESS_DIR, f"{username}_{task_name}.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return Decimal(str(data.get("progress", 0)))
+    return Decimal("0")
+
+
+def safe_save_progress(username, task_name, progress_value):
+    """
+    Save progress only if it's higher than the previous value.
+    """
+    current = load_progress(username, task_name)
+    new_value = Decimal(str(progress_value))
+    if new_value > current:
+        save_progress(username, task_name, new_value)
 
 
 def update_progress_smoothly(username: str, task_name: str, target_value, step=0.1):
@@ -63,7 +57,7 @@ def update_progress_smoothly(username: str, task_name: str, target_value, step=0
     if not username:
         raise ValueError("Username must be provided")
 
-    current = Decimal(str(load_progress(username, task_name)))
+    current = load_progress(username, task_name)
     target = Decimal(str(target_value))
     step = Decimal(str(step))
 
@@ -92,7 +86,7 @@ def process_resume_chunks(username: str, chunks: list):
             pass
 
         progress = Decimal(str(i / total_chunks))
-        save_progress(username, 'resume_chunks', progress)
+        safe_save_progress(username, 'resume_chunks', progress)
 
-    save_progress(username, 'resume_chunks', Decimal("1.0"))
+    safe_save_progress(username, 'resume_chunks', Decimal("1.0"))
     return True
