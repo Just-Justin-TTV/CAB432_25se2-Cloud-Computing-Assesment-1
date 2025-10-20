@@ -29,6 +29,8 @@ from django.conf import settings
 from django.urls import reverse
 from django.core.cache import cache
 from django.contrib.auth import login
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 
 
 from app1.models import TaskProgress, Resume, JobApplication
@@ -329,30 +331,35 @@ def unauthorized(request):
     return render(request, 'unauthorized.html', status=401)
 
 
+@csrf_exempt
+@never_cache
+@xframe_options_exempt
 def register_view(request):
-    """Handle user registration via Cognito and show appropriate messages."""
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        password1 = request.POST.get('password1')
-        password2 = request.POST.get('password2')
+    """Handle user registration via Django auth."""
+    if request.method == "POST":
+        username = request.POST.get("username")
+        email = request.POST.get("email")
+        password1 = request.POST.get("password1")
+        password2 = request.POST.get("password2")
 
         if not all([username, email, password1, password2]):
             messages.error(request, "All fields are required.")
-            return render(request, 'register.html')
+            return render(request, "register.html")
 
         if password1 != password2:
             messages.error(request, "Passwords do not match.")
-            return render(request, 'register.html')
+            return render(request, "register.html")
 
-        if not cognito_signup(username, password1, email):
-            messages.error(request, "Registration failed. Try again.")
-            return render(request, 'register.html')
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already taken.")
+            return render(request, "register.html")
 
-        messages.success(request, "Check your email to confirm registration.")
-        return redirect('confirm')
+        user = User.objects.create_user(username=username, email=email, password=password1)
+        user.save()
+        messages.success(request, "Registration successful! You can now log in.")
+        return redirect("login")
 
-    return render(request, 'register.html')
+    return render(request, "register.html")
 
 
 @csrf_exempt
@@ -371,61 +378,33 @@ def confirm_view(request):
 
 @csrf_exempt
 def login_view(request):
-    """Handle user login, password reset, and Cognito authentication."""
-    
+    """Handle user login using Django auth."""
     if request.method == "POST":
         username = request.POST.get("username")
         password = request.POST.get("password")
 
-        if username and password:
-            cognito_user = cognito_authenticate(username, password)
-            if cognito_user:
-                request.session['cognito_user'] = {
-                    'username': username,
-                    'id_token': cognito_user.get('IdToken'),
-                    'access_token': cognito_user.get('AccessToken'),
-                    'refresh_token': cognito_user.get('RefreshToken'),
-                }
-                django_user = sync_cognito_user_to_django(request)
-                if django_user:
-                    messages.success(request, f"Login successful! Welcome {django_user.username}.")
-                    return redirect("home")
-                else:
-                    messages.error(request, "Failed to sync user with Django.")
-            else:
-                messages.error(request, "Invalid username or password.")
+        # Authenticate against Django's user model
+        user = authenticate(request, username=username, password=password)
+        if user:
+            # Log in the user with Django
+            login(request, user)
 
-        elif "send_code" in request.POST:
-            reset_username = request.POST.get("reset_username")
-            result = cognito_send_reset_code(reset_username)
-            messages.success(
-                request,
-                "Check your email for the reset code." if result else "Failed to send reset code."
-            )
+            # Set session info for Cognito decorators
+            # Add a dummy id_token to satisfy @cognito_group_required / @cognito_login_required
+            request.session['cognito_user'] = {
+                "username": user.username,
+                "id_token": "fake-token-for-django-login"
+            }
 
-        elif "confirm_reset" in request.POST:
-            reset_username = request.POST.get("reset_username")
-            code = request.POST.get("reset_code")
-            new_password = request.POST.get("new_password")
+            messages.success(request, f"Login successful! Welcome {user.username}.")
+            return redirect("home")  # Redirect to home/dashboard
 
-            result = cognito_confirm_reset(reset_username, code, new_password)
-            if result:
-                request.session['cognito_user'] = {
-                    'username': reset_username,
-                    'id_token': result.get('IdToken'),
-                    'access_token': result.get('AccessToken'),
-                    'refresh_token': result.get('RefreshToken'),
-                }
-                django_user = sync_cognito_user_to_django(request)
-                if django_user:
-                    messages.success(request, f"Password reset successful! Logged in as {django_user.username}.")
-                    return redirect("home")
-                else:
-                    messages.error(request, "Password reset succeeded, but failed to sync with Django.")
-            else:
-                messages.error(request, "Password reset failed. Check your code and try again.")
+        else:
+            messages.error(request, "Invalid username or password.")
 
     return render(request, "login.html")
+
+
 
 
 @csrf_exempt

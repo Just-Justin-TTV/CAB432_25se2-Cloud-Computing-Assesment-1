@@ -1,29 +1,30 @@
-import os  
+import os
 import json
 from pathlib import Path
-import boto3
-from botocore.exceptions import ClientError
+from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ------------------------------
-# AWS Secrets Manager helper
+# Local secrets helper with SQLite fallback
 # ------------------------------
-def get_secrets(secret_name, region_name="ap-southeast-2"):
-    """Retrieve a secret from AWS Secrets Manager and return it as a Python dictionary."""
-    session = boto3.session.Session()
-    client = session.client(service_name="secretsmanager", region_name=region_name)
-    try:
-        response = client.get_secret_value(SecretId=secret_name)
-        secret_string = response.get("SecretString", "")
-        if not secret_string:
-            raise ValueError(f"No secret found for {secret_name}")
-        return json.loads(secret_string)
-    except ClientError as e:
-        raise e
+LOCAL_SECRETS_PATH = os.path.join(BASE_DIR, "local_secrets.json")
 
-# Fetch secrets for application configuration
-secrets = get_secrets(secret_name="n11605618-a2RDSecret")
+def get_local_secrets():
+    """Retrieve local secrets from a JSON file, fallback to defaults if missing."""
+    if not os.path.exists(LOCAL_SECRETS_PATH):
+        print("⚠️ local_secrets.json not found — using default SQLite setup.")
+        return {
+            "SECRET_KEY": get_random_secret_key(),
+            "DB_NAME": os.path.join(BASE_DIR, "db.sqlite3"),
+            "USE_SQLITE": True
+        }
+    with open(LOCAL_SECRETS_PATH, "r") as file:
+        secrets = json.load(file)
+        secrets["USE_SQLITE"] = False
+        return secrets
+
+secrets = get_local_secrets()
 
 # ------------------------------
 # Django core settings
@@ -32,7 +33,7 @@ SECRET_KEY = secrets["SECRET_KEY"]
 DEBUG = True  # Set to False in production
 ALLOWED_HOSTS = ["*"]
 
-# Installed apps including Tailwind, custom app, and dev tools
+# Installed apps
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -87,70 +88,47 @@ WSGI_APPLICATION = 'app1.wsgi.application'
 # ------------------------------
 # Database configuration
 # ------------------------------
-DB_USER = secrets["username"]
-DB_PASSWORD = secrets["password"]
-DB_NAME = secrets["dbname"]
-DB_HOST = secrets["host"]
-DB_PORT = secrets.get("port", 5432)
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": DB_NAME,
-        "USER": DB_USER,
-        "PASSWORD": DB_PASSWORD,
-        "HOST": DB_HOST,
-        "PORT": DB_PORT,
-        "OPTIONS": {"sslmode": "require"},
+if secrets.get("USE_SQLITE"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": secrets["DB_NAME"],
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": secrets.get("DB_NAME"),
+            "USER": secrets.get("DB_USER"),
+            "PASSWORD": secrets.get("DB_PASSWORD"),
+            "HOST": secrets.get("DB_HOST", "localhost"),
+            "PORT": secrets.get("DB_PORT", 5432),
+        }
+    }
 
 # ------------------------------
-# Memcached cache helper
+# Memcached cache helper (optional)
 # ------------------------------
-MEMCACHED_HOST = os.environ.get('MEMCACHED_HOST', 'memcached')
+MEMCACHED_HOST = os.environ.get('MEMCACHED_HOST', '127.0.0.1')
 MEMCACHED_PORT = int(os.environ.get('MEMCACHED_PORT', 11211))
-DEFAULT_MEMCACHED_ENDPOINT = "127.0.0.1:11211"
-
-def get_cache_location():
-    """Return Memcached endpoint if available, otherwise fallback to localhost."""
-    import socket
-    try:
-        sock = socket.create_connection((MEMCACHED_HOST, MEMCACHED_PORT), timeout=1)
-        sock.close()
-        return f"{MEMCACHED_HOST}:{MEMCACHED_PORT}"
-    except Exception:
-        return DEFAULT_MEMCACHED_ENDPOINT
+DEFAULT_MEMCACHED_ENDPOINT = f"{MEMCACHED_HOST}:{MEMCACHED_PORT}"
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.memcached.PyMemcacheCache",
-        "LOCATION": get_cache_location(),
+        "LOCATION": DEFAULT_MEMCACHED_ENDPOINT,
     }
 }
 
 # ------------------------------
-# AWS S3 / MinIO helper (optional)
+# Local file storage
 # ------------------------------
-USE_S3 = secrets.get("USE_S3", False)
-AWS_REGION = secrets.get("AWS_REGION", "ap-southeast-2")
-AWS_STORAGE_BUCKET_NAME = secrets.get("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_ENDPOINT_URL = secrets.get("AWS_S3_ENDPOINT_URL")
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-if USE_S3:
-    def get_s3_client():
-        """Return an S3 client for AWS or MinIO."""
-        session = boto3.Session(region_name=AWS_REGION)
-        return session.client("s3", endpoint_url=AWS_S3_ENDPOINT_URL)
-
-# ------------------------------
-# Cognito configuration
-# ------------------------------
-COGNITO_REGION = secrets.get("COGNITO_REGION", "ap-southeast-2")
-COGNITO_USER_POOL_ID = secrets.get("COGNITO_USER_POOL_ID")
-COGNITO_CLIENT_ID = secrets.get("COGNITO_CLIENT_ID")
-COGNITO_CLIENT_SECRET = secrets.get("COGNITO_CLIENT_SECRET")
-COGNITO_ADMIN_GROUP = secrets.get("COGNITO_ADMIN_GROUP", "admin")
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 # ------------------------------
 # Sessions & security settings
@@ -162,16 +140,6 @@ SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "False") == "Tru
 CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
 
 # ------------------------------
-# Static & media files configuration
+# External services (local placeholder)
 # ------------------------------
-STATIC_URL = '/static/'
-MEDIA_URL = '/media/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# ------------------------------
-# Cognito token refresh margin
-# ------------------------------
-COGNITO_TOKEN_REFRESH_MARGIN = 300  # Seconds before expiry to refresh token
-
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
