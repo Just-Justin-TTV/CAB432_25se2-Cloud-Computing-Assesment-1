@@ -65,7 +65,10 @@ dynamodb = boto3.resource('dynamodb', region_name="ap-southeast-2")
 table = dynamodb.Table("n11605618dynamo")
 
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
-
+import threading
+from django.http import JsonResponse
+from .cpu_utils import match_resume_to_job
+from .models import Resume, JobApplication
 # ===== Cognito / AWS Setup =====
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET", "")
@@ -76,6 +79,28 @@ AWS_PROFILE = "CAB432-STUDENT"
 AWS_REGION = "ap-southeast-2"
 AWS_BUCKET = "justinsinghatwalbucket"
 
+
+
+def trigger_resume_match(request, resume_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    resume = get_object_or_404(Resume, id=resume_id)
+    username = request.user.username
+    job_position = request.POST.get("job_position", "Software Engineer")
+    
+    def process():
+        score, feedback_file = match_resume_to_job(username, resume.s3_file_path, job_position)
+        # Save results to DB
+        JobApplication.objects.create(
+            user=request.user,
+            resume=resume,
+            score=score/100,
+            feedback=open(feedback_file).read()
+        )
+    
+    threading.Thread(target=process).start()
+    return JsonResponse({"status": "processing started"})
 
 def task_progress_api(request, task_name):
     """Return JSON with progress (0-100) and optional result for a task."""
