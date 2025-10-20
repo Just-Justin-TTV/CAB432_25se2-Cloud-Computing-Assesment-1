@@ -21,59 +21,6 @@ services:
       interval: 5s
       retries: 12
 
-  # Memcached caching service
-  memcached:
-    image: memcached:latest
-    container_name: cab432-memcached
-    restart: always
-    ports:
-      - "11211:11211"
-
-  # Django web application service
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: CAB432-web
-    depends_on:
-      ollama:
-        condition: service_healthy
-      memcached:
-        condition: service_started
-    ports:
-      - "8000:8000"
-    command: ["/code/entrypoint.sh"]
-    environment:
-      # Database configuration
-      DB_HOST: ${DB_HOST}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_PORT: ${DB_PORT}
-      DB_SSLMODE: ${DB_SSLMODE}
-
-      # S3 storage configuration
-      USE_S3: "True"
-      AWS_PROFILE: "CAB432-STUDENT"
-      AWS_REGION: "ap-southeast-2"
-      AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
-      OLLAMA_URL: "http://ollama:11434"
-
-      # AWS Cognito authentication configuration
-      COGNITO_USER_POOL_ID: "ap-southeast-2_XEtlj9zEG"
-      COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
-      COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
-      COGNITO_REGION: "ap-southeast-2"
-
-      # Memcached configuration
-      MEMCACHED_HOST: "memcached"
-      MEMCACHED_PORT: "11211"
-
-    # Mount project code and AWS credentials
-    volumes:
-      - .:/code
-      - C:\Users\Justin\.aws:/root/.aws:ro
-
 # Persistent volume for Ollama data
 volumes:
   ollama_data:
