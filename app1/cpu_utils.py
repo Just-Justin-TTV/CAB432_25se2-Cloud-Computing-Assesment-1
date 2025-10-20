@@ -19,7 +19,10 @@ os.makedirs(RESUME_DIR, exist_ok=True)
 JOB_RESULTS_DIR = "job_results"
 os.makedirs(JOB_RESULTS_DIR, exist_ok=True)
 
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_URL = os.environ.get("OLLAMA_URL")
+if not OLLAMA_URL:
+    raise Exception("OLLAMA_URL environment variable is not set!")
+
 
 
 # ===== Progress helper =====

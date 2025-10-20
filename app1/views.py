@@ -45,7 +45,10 @@ from .dynamo_utils import (
 from . import s3_utils
 
 # ===== Ollama Tags / Cache =====
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_URL = os.environ.get("OLLAMA_URL")
+if not OLLAMA_URL:
+    raise Exception("OLLAMA_URL environment variable is not set!")
+
 
 
 # Example: initial request to Ollama API
@@ -101,7 +104,10 @@ def test_ollama_connection():
     import requests
     import logging
 
-    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    OLLAMA_URL = os.environ.get("OLLAMA_URL")
+    if not OLLAMA_URL:
+        raise Exception("OLLAMA_URL environment variable is not set!")
+
     test_url = f"{OLLAMA_URL}/api/tags"
     logging.info(f"Testing connection to Ollama API at {test_url}")
 
@@ -784,7 +790,7 @@ def wait_for_ollama(timeout=60):
     """
     Wait until Ollama API is available, or raise an exception after timeout.
     """
-    url = f"{os.environ.get('OLLAMA_HOST', 'http://ollama:11434')}/api/tags"
+    url = f"{OLLAMA_URL}/api/tags"
     start = time.time()
     while time.time() - start < timeout:
         try:
