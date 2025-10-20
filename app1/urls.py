@@ -37,6 +37,7 @@ urlpatterns = [
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),  # View detailed job application
     path("mock/devb/start/", devb_mock.mock_resume_process, name="mock_devb_start"),
     path("mock/devb/progress/", devb_mock.mock_resume_progress, name="mock_devb_progress"),
+    path('simulate-upload/', views.simulate_resume_upload, name='simulate_upload'),
 
     # Browser reload (development only)
     path("__reload__/", include("django_browser_reload.urls")),  # Live-reload for frontend development

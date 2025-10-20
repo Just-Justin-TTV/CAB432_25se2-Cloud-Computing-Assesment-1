@@ -49,12 +49,72 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 
 
 # Example: initial request to Ollama API
-response = requests.get(f"{OLLAMA_URL}/api/tags")
+
 
 # Logger
 logger = logging.getLogger(__name__)
 
+def simulate_resume_upload(request):
+    """
+    Simulates a resume upload and runs the existing processing logic.
+    """
+    test_file_path = os.path.join(settings.BASE_DIR, "test_resumes", "TestResume.pdf")
 
+    # Call your existing processing function
+    from .resume_processing import process_resume  # adjust import
+    result = process_resume(test_file_path)  # could be a dict with match info, etc.
+
+    # Return a JSON response to simulate front-end consumption
+    return JsonResponse({
+        "status": "success",
+        "file_name": "TestResume.pdf",
+        "match_result": result,  # whatever your process_resume returns
+        "download_url": "/static/test_resumes/TestResume.pdf"  # optional
+    })
+
+
+def test_ollama_connection():
+    import os
+    import requests
+    import logging
+
+    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    test_url = f"{OLLAMA_URL}/api/tags"
+    logging.info(f"Testing connection to Ollama API at {test_url}")
+
+    try:
+        response = requests.get(test_url, timeout=10)
+        response.raise_for_status()
+        models = response.json().get("models", [])
+        logging.info(f"Ollama connection successful, models available: {[m['name'] for m in models]}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to connect to Ollama API: {e}")
+
+
+def call_ollama(payload, retries=3, delay=2):
+    """
+    Call the Ollama API and return JSON response.
+    Logs each attempt for debugging.
+    """
+    url = f"{OLLAMA_URL}/api/generate"
+    logging.info(f"Calling Ollama API at: {url}")
+    logging.debug(f"Payload: {payload}")
+
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.post(url, json=payload, timeout=60)
+            response.raise_for_status()
+            logging.info(f"Successfully received response from Ollama on attempt {attempt}")
+            logging.debug(f"Response: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"Attempt {attempt} failed: {e}")
+            if attempt < retries:
+                logging.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                logging.error("All Ollama attempts failed")
+                raise
 # ===== Ollama Tags / Cache =====
 
 
@@ -68,7 +128,7 @@ table = dynamodb.Table("n11605618dynamo")
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 import threading
 from django.http import JsonResponse
-from .cpu_utils import match_resume_to_job
+
 from .models import Resume, JobApplication
 # ===== Cognito / AWS Setup =====
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
@@ -91,7 +151,7 @@ def trigger_resume_match(request, resume_id):
 
     if settings.USE_LOCAL_CPU:
         # Use local processing directly (optional)
-        from .cpu_utils import match_resume_to_job
+        
         score, feedback_file = match_resume_to_job(username, resume_path, job_position)
     else:
         # Call your Ollama app (DevB)
