@@ -143,3 +143,13 @@ CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "False") == "True"
 # External services (local placeholder)
 # ------------------------------
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
+
+# settings.py
+# Switch between local Ollama and production
+USE_LOCAL_CPU = False  # False means "use external API (DevB)"
+DEVB_URL = "http://localhost:8001/api/process_resume/"  # Replace 8001 with whatever your Ollama app runs on
+
+# ===== External Services =====
+DEVB_URL = "http://localhost:8001/api/process_resume/"
+

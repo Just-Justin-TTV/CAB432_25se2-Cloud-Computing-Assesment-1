@@ -45,7 +45,8 @@ from .dynamo_utils import (
 from . import s3_utils
 
 # ===== Ollama Tags / Cache =====
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
 
 # Example: initial request to Ollama API
 response = requests.get(f"{OLLAMA_URL}/api/tags")
@@ -55,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 
 # ===== Ollama Tags / Cache =====
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://cab432-ollama:11434")
+
 
 from .models import Resume, JobApplication
 from . import s3_utils
@@ -82,25 +83,38 @@ AWS_BUCKET = "justinsinghatwalbucket"
 
 
 def trigger_resume_match(request, resume_id):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST required"}, status=405)
+    username = request.user.username if request.user.is_authenticated else "guest"
+    job_position = request.GET.get("job_position", "Software Engineer")
 
-    resume = get_object_or_404(Resume, id=resume_id)
-    username = request.user.username
-    job_position = request.POST.get("job_position", "Software Engineer")
-    
-    def process():
-        score, feedback_file = match_resume_to_job(username, resume.s3_file_path, job_position)
-        # Save results to DB
-        JobApplication.objects.create(
-            user=request.user,
-            resume=resume,
-            score=score/100,
-            feedback=open(feedback_file).read()
-        )
-    
-    threading.Thread(target=process).start()
-    return JsonResponse({"status": "processing started"})
+    # The file path for the resume (assuming it's saved locally)
+    resume_path = f"resumes/{resume_id}.pdf"
+
+    if settings.USE_LOCAL_CPU:
+        # Use local processing directly (optional)
+        from .cpu_utils import match_resume_to_job
+        score, feedback_file = match_resume_to_job(username, resume_path, job_position)
+    else:
+        # Call your Ollama app (DevB)
+        data = {
+            "username": username,
+            "resume_path": resume_path,
+            "job_position": job_position
+        }
+        try:
+            response = requests.post(settings.DEVB_URL, json=data, timeout=600)
+            response.raise_for_status()
+            result = response.json()
+            score = result.get("score", 0)
+            feedback_file = result.get("feedback_file", "none")
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({
+        "score": score,
+        "feedback_file": feedback_file,
+        "message": "Resume match completed successfully"
+    })
+
 
 def task_progress_api(request, task_name):
     """Return JSON with progress (0-100) and optional result for a task."""
@@ -562,7 +576,8 @@ def match_resume_to_job(request, resume_id):
     task_id = str(uuid.uuid4())  # unique task identifier
 
     # Send request to Dev B API
-    dev_b_url = "http://localhost:8000/mock/devb/start/"
+    dev_b_url = settings.DEVB_URL
+
     payload = {
         "task_id": task_id,
         "username": user,
