@@ -1,7 +1,4 @@
-version: '3.9'
-
 services:
-  # Ollama AI service
   ollama:
     build:
       context: ./ollama
@@ -15,12 +12,16 @@ services:
     environment:
       OLLAMA_HOST: "0.0.0.0:11434"
     command: sh -c "ollama serve"
-    # Health check to ensure Ollama API is ready
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 5s
       retries: 12
+    networks:
+      - cab432-network
 
-# Persistent volume for Ollama data
 volumes:
   ollama_data:
+
+networks:
+  cab432-network:
+    external: true
