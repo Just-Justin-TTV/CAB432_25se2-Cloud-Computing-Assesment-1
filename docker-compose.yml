@@ -1,26 +1,4 @@
-version: '3.9'
-
 services:
-  # Ollama AI service
-  ollama:
-    build:
-      context: ./ollama
-      dockerfile: Dockerfile
-    container_name: cab432-ollama
-    restart: always
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      OLLAMA_HOST: "0.0.0.0:11434"
-    command: sh -c "ollama serve"
-    # Health check to ensure Ollama API is ready
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 5s
-      retries: 12
-
   # Memcached caching service
   memcached:
     image: memcached:latest
@@ -34,10 +12,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: CAB432-web
+    container_name: cab432-web
     depends_on:
-      ollama:
-        condition: service_healthy
       memcached:
         condition: service_started
     ports:
@@ -57,23 +33,24 @@ services:
       AWS_PROFILE: "CAB432-STUDENT"
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
-      OLLAMA_URL: "http://ollama:11434"
 
-      # AWS Cognito authentication configuration
-      COGNITO_USER_POOL_ID: "ap-southeast-2_XEtlj9zEG"
-      COGNITO_CLIENT_ID: "5dmsjn9reflk2l2auq48qr9r1r"
-      COGNITO_CLIENT_SECRET: "vfor73vf1774pq8eqmgrr3j87d44o160psmpvep0l34s19fndpt"
-      COGNITO_REGION: "ap-southeast-2"
+      # Ollama URL (point to new microservice)
+      OLLAMA_URL: "http://cab432-ollama:11434"
 
       # Memcached configuration
       MEMCACHED_HOST: "memcached"
       MEMCACHED_PORT: "11211"
 
-    # Mount project code and AWS credentials
     volumes:
       - .:/code
       - C:\Users\Justin\.aws:/root/.aws:ro
 
-# Persistent volume for Ollama data
+    # Optional: basic healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 10s
+      retries: 5
+
 volumes:
-  ollama_data:
+  # No volumes needed for web right now
+  ollama_data:  # keep for reference if needed
