@@ -60,7 +60,7 @@ class JobApplication(models.Model):
     job_description = models.TextField()
     tailored_resume_s3_url = models.URLField(max_length=1024, blank=True, null=True)
     score = models.FloatField(null=True, blank=True)
-    ai_model = models.CharField(max_length=50, default="mistral")
+    ai_model = models.CharField(max_length=50, default="gemma:2b")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     error_message = models.TextField(null=True, blank=True)
     feedback = models.TextField(null=True, blank=True)

@@ -713,7 +713,7 @@ def match_resume_to_job(request, resume_id):
             
             Return JSON with keys: score, feedback
             """
-            payload = {"model": "mistral", "prompt": prompt, "stream": False}
+            payload = {"model": "gemma:2b", "prompt": prompt, "stream": False}
             safe_save_progress(django_user.username, task_name, Decimal("40"))
 
             response = call_ollama(payload)
@@ -739,7 +739,7 @@ def match_resume_to_job(request, resume_id):
                 user=django_user,
                 resume=resume,
                 job_description=job_position,
-                ai_model="mistral",
+                ai_model="gemma:2b",
                 score=float(score)/100.0,
                 status="completed",
                 feedback=feedback,
@@ -748,7 +748,7 @@ def match_resume_to_job(request, resume_id):
 
             safe_save_progress(django_user.username, task_name, Decimal("100"))
             messages.success(request, f"Match analysis complete! Score: {score}")
-            return redirect("dashboard")
+            
 
         except Exception as e:
             logging.error(f"[ERROR] AI processing failed: {e}")
