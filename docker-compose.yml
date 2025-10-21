@@ -1,13 +1,15 @@
+version: '3.9'
+
 services:
-  # Memcached caching service
   memcached:
     image: memcached:latest
     container_name: cab432-memcached
     restart: always
     ports:
       - "11211:11211"
+    networks:
+      - cab432-network
 
-  # Django web application service
   web:
     build:
       context: .
@@ -34,7 +36,7 @@ services:
       AWS_REGION: "ap-southeast-2"
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
 
-      # Ollama URL (point to new microservice)
+      # Ollama URL (point to external Ollama microservice)
       OLLAMA_URL: "http://cab432-ollama:11434"
 
       # Memcached configuration
@@ -45,12 +47,15 @@ services:
       - .:/code
       - C:\Users\Justin\.aws:/root/.aws:ro
 
-    # Optional: basic healthcheck
+    # Optional healthcheck
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 10s
       retries: 5
 
-volumes:
-  # No volumes needed for web right now
-  ollama_data:  # keep for reference if needed
+    networks:
+      - cab432-network
+
+networks:
+  cab432-network:
+    external: true
