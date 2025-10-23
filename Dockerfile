@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y curl bash python3-pip
 # Install Ollama CLI
 RUN curl -sSL https://ollama.com/install.sh | bash
 
+# Pull Gemma's model
+RUN ollama pull gemma:2b
+
+
 # Copy your service code
 COPY ollama_start.sh /root/.ollama/ollama_start.sh
 COPY resume_processing.py progress.py config.py app.py /root/.ollama/
