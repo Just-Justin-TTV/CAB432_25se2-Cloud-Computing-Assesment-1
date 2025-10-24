@@ -24,9 +24,8 @@ EXPOSE 11434
 
 # Start Ollama in foreground, wait until server is ready, then pull Gemma
 CMD sh -c "\
-    ollama serve & \
-    echo 'Waiting for Ollama to start...' && \
-    until curl -s http://localhost:11434/api/tags >/dev/null 2>&1; do sleep 2; done && \
-    echo 'Ollama ready, pulling Gemma...' && \
-    ollama pull gemma:2b && wait \
+    echo 'Pulling Gemma...' && \
+    ollama pull gemma:2b && \
+    echo 'Starting Ollama server...' && \
+    ollama serve --port 11434 --host 0.0.0.0 \
 "

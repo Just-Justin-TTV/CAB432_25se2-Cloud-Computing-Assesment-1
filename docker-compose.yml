@@ -15,8 +15,8 @@ services:
       OLLAMA_HOST: "0.0.0.0:11434"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 5s
-      retries: 12
+      interval: 10s
+      retries: 30
     networks:
       - cab432-network
 
