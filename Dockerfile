@@ -1,7 +1,7 @@
 # Use Python slim as base
 FROM python:3.12-slim
 
-# Set working directory
+# Set working directory for Ollama
 WORKDIR /root/.ollama
 
 # Environment variables for Ollama
@@ -27,8 +27,19 @@ RUN ollama serve & \
     ollama pull gemma:2b && \
     pkill ollama || true
 
-# Expose default Ollama port
-EXPOSE 11434
+# Set working directory for Flask app
+WORKDIR /app
 
-# Command to start Ollama server when container runs
-CMD ["ollama", "serve"]
+# Copy Flask app code
+COPY app.py /app/
+COPY resume_utils.py /app/
+
+# Install Python dependencies
+RUN pip install flask requests
+
+# Expose Ollama port and Flask port
+EXPOSE 11434
+EXPOSE 8001
+
+# Start both Ollama and Flask when the container runs
+CMD sh -c "ollama serve & echo 'Waiting for Ollama...' && sleep 10 && python app.py"

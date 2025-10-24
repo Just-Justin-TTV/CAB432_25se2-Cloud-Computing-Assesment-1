@@ -34,6 +34,20 @@ def process_resume():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+import requests
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route("/ollama/api/<path:endpoint>", methods=["GET", "POST"])
+def ollama_proxy(endpoint):
+    url = f"http://localhost:11434/api/{endpoint}"
+    if request.method == "POST":
+        response = requests.post(url, json=request.json)
+    else:
+        response = requests.get(url)
+    return jsonify(response.json())
+
 
 if __name__ == "__main__":
     # Run the Flask app on localhost:8001 (you can change this if needed)
