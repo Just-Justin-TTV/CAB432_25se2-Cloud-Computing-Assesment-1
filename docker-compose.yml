@@ -3,7 +3,7 @@ version: '3.9'
 services:
   ollama:
     build:
-      context: ./ollama
+      context: .
       dockerfile: Dockerfile
     container_name: cab432-ollama
     restart: always

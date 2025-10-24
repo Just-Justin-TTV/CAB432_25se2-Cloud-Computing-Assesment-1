@@ -1,29 +1,34 @@
+# Use Python slim as base
 FROM python:3.12-slim
 
+# Set working directory
 WORKDIR /root/.ollama
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y curl bash python3-pip
+# Environment variables for Ollama
+ENV OLLAMA_MODELS=/root/.ollama/models
+ENV COMPOSE_BAKE=true
 
-# Install Ollama CLI
+# Install dependencies including pkill and other essential tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    bash \
+    python3-pip \
+    procps \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Ollama
 RUN curl -sSL https://ollama.com/install.sh | bash
 
-# Pull Gemma's model
-RUN ollama pull gemma:2b
+# Pull Gemma model safely
+RUN ollama serve & \
+    echo "Waiting for Ollama server to start..." && \
+    sleep 20 && \
+    ollama pull gemma:2b && \
+    pkill ollama || true
 
+# Expose default Ollama port
+EXPOSE 11434
 
-# Copy your service code
-COPY ollama_start.sh /root/.ollama/ollama_start.sh
-COPY resume_processing.py progress.py config.py app.py /root/.ollama/
-
-# Fix typo and make startup script executable
-RUN chmod +x /root/.ollama/ollama_start.sh
-
-# Install Python dependencies (PyPDF2, python-docx, requests, Flask)
-RUN pip install --no-cache-dir Flask PyPDF2 python-docx requests
-
-# Expose both Ollama and Flask ports
-EXPOSE 11434 8001
-
-# Start the Flask app (which internally calls Ollama)
-CMD ["/root/.ollama/ollama_start.sh"]
+# Command to start Ollama server when container runs
+CMD ["ollama", "serve"]
