@@ -8,11 +8,10 @@ WORKDIR /root/.ollama
 ENV OLLAMA_MODELS=/root/.ollama/models
 ENV COMPOSE_BAKE=true
 
-# Install dependencies including pkill and other essential tools
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     bash \
-    python3-pip \
     procps \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -20,26 +19,14 @@ RUN apt-get update && apt-get install -y \
 # Install Ollama
 RUN curl -sSL https://ollama.com/install.sh | bash
 
-# Pull Gemma model safely
-RUN ollama serve & \
-    echo "Waiting for Ollama server to start..." && \
-    sleep 20 && \
-    ollama pull gemma:2b && \
-    pkill ollama || true
-
-# Set working directory for Flask app
-WORKDIR /app
-
-# Copy Flask app code
-COPY app.py /app/
-COPY resume_utils.py /app/
-
-# Install Python dependencies
-RUN pip install flask requests
-
-# Expose Ollama port and Flask port
+# Expose Ollama port
 EXPOSE 11434
-EXPOSE 8001
 
-# Start both Ollama and Flask when the container runs
-CMD sh -c "ollama serve & echo 'Waiting for Ollama...' && sleep 10 && python app.py"
+# Start Ollama in foreground, wait until server is ready, then pull Gemma
+CMD sh -c "\
+    ollama serve & \
+    echo 'Waiting for Ollama to start...' && \
+    until curl -s http://localhost:11434/api/tags >/dev/null 2>&1; do sleep 2; done && \
+    echo 'Ollama ready, pulling Gemma...' && \
+    ollama pull gemma:2b && wait \
+"

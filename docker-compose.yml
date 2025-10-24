@@ -8,12 +8,11 @@ services:
     container_name: cab432-ollama
     restart: always
     ports:
-      - "11434:11434"
+      - "11434:11434"  # Expose Ollama externally
     volumes:
       - ollama_data:/root/.ollama
     environment:
       OLLAMA_HOST: "0.0.0.0:11434"
-    command: sh -c "ollama serve"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 5s
