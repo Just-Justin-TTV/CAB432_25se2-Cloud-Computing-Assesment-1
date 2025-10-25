@@ -8,7 +8,7 @@ services:
     container_name: cab432-ollama
     restart: always
     ports:
-      - "11434:11434"  # Expose Ollama externally
+      - "80:11434"
     volumes:
       - ollama_data:/root/.ollama
     environment:
