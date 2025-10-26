@@ -25,8 +25,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py ./
 
+# Install Gunicorn
+RUN pip install --no-cache-dir gunicorn
+
 # Expose Flask port
 EXPOSE 80
 
-# Start Ollama in the background, then Flask
-CMD sh -c "ollama serve & python app.py"
+# Start Ollama in the background, then Gunicorn
+CMD sh -c "ollama serve & gunicorn --bind 0.0.0.0:80 app:app --log-level info"
