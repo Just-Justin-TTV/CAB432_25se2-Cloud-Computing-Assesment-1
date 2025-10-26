@@ -1,22 +1,16 @@
 version: '3.9'
 
 services:
-  ollama:
+  ollama-flask:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: cab432-ollama
     restart: always
     ports:
-      - "80:11434"
+      - "80:80"
     volumes:
       - ollama_data:/root/.ollama
-    environment:
-      OLLAMA_HOST: "0.0.0.0:11434"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      retries: 30
     networks:
       - cab432-network
 
@@ -26,3 +20,4 @@ volumes:
 networks:
   cab432-network:
     external: true
+

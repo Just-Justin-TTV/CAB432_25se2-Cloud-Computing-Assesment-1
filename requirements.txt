@@ -76,3 +76,4 @@ PyJWT>=2.8.0
 
 # Python memcache client
 pymemcache>=3.6.0
+Flask
