@@ -1,3 +1,4 @@
+import requests
 from flask import Flask, Response, request, jsonify
 import subprocess
 import sys
@@ -33,25 +34,53 @@ def health():
 
 
 @app.route("/api/generate", methods=["POST"])
-def generate():
+def generate_http():
     data = request.get_json()
     model = data.get("model")
     prompt = data.get("prompt")
-    max_tokens = data.get("max_tokens", 50)
 
     if not model or not prompt:
-        return {"error": "Both 'model' and 'prompt' are required"}, 400
+        return jsonify({"error": "Both 'model' and 'prompt' are required"}), 400
 
     try:
-        process = subprocess.Popen(
-            ["ollama", "run", model, prompt],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+        logger.info(f"Sending prompt to Ollama HTTP API: {model}")
+        res = requests.post(
+            "http://127.0.0.1:11434/api/generate",
+            json={"model": model, "prompt": prompt}
         )
-        output, error = process.communicate()
-        if process.returncode != 0:
-            return {"error": "Ollama failed", "details": error}, 500
-        return {"response": output}, 200
+        return jsonify(res.json()), res.status_code
     except Exception as e:
-        return {"error": str(e)}, 500
+        logger.error(f"Ollama HTTP call failed: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+    # ------------------------
+# 3️⃣ List models
+# ------------------------
+@app.route("/api/models", methods=["GET"])
+def list_models():
+    try:
+        res = requests.get("http://127.0.0.1:11434/api/tags")
+        return jsonify(res.json()), res.status_code
+    except Exception as e:
+        return jsonify({"error": f"Could not connect to Ollama: {str(e)}"}), 500
+
+
+# ------------------------
+# 4️⃣ Start Ollama if not running
+# ------------------------
+@app.route("/api/start_ollama", methods=["POST"])
+def start_ollama():
+    try:
+        # Check if Ollama is already running
+        try:
+            res = requests.get("http://127.0.0.1:11434/health")
+            if res.status_code == 200:
+                return jsonify({"status": "Ollama already running"}), 200
+        except Exception:
+            pass
+
+        # Start Ollama in background
+        subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return jsonify({"status": "Ollama starting..."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
