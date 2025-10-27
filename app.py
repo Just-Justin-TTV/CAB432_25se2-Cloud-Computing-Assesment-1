@@ -33,6 +33,9 @@ def health():
     return "OK", 200
 
 
+# ------------------------
+# HTTP Ollama API
+# ------------------------
 @app.route("/api/generate", methods=["POST"])
 def generate_http():
     data = request.get_json()
@@ -48,10 +51,40 @@ def generate_http():
             "http://127.0.0.1:11434/api/generate",
             json={"model": model, "prompt": prompt}
         )
-        return jsonify(res.json()), res.status_code
+        # Return raw text instead of trying to parse JSON
+        return jsonify({"response": res.text}), res.status_code
     except Exception as e:
         logger.error(f"Ollama HTTP call failed: {e}")
         return jsonify({"error": str(e)}), 500
+
+# ------------------------
+# Subprocess Ollama CLI
+# ------------------------
+@app.route("/api/generate1", methods=["POST"])
+def generate_subprocess():
+    data = request.get_json()
+    model = data.get("model")
+    prompt = data.get("prompt")
+
+    if not model or not prompt:
+        return jsonify({"error": "Both 'model' and 'prompt' are required"}), 400
+
+    try:
+        process = subprocess.Popen(
+            ["ollama", "run", model, prompt],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        output, error = process.communicate()
+
+        if process.returncode != 0:
+            return jsonify({"error": "Ollama failed", "details": error}), 500
+
+        return jsonify({"response": output.strip()}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
     
     # ------------------------
 # 3️⃣ List models
