@@ -37,7 +37,7 @@ services:
       AWS_STORAGE_BUCKET_NAME: "justinsinghatwalbucket"
 
       # Ollama URL (point to external Ollama microservice)
-      OLLAMA_URL: "http://cab432-ollama:11434"
+      OLLAMA_URL: "http://172.31.98.122"
 
       # Memcached configuration
       MEMCACHED_HOST: "memcached"
