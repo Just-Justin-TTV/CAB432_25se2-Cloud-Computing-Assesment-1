@@ -184,4 +184,4 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # ------------------------------
 COGNITO_TOKEN_REFRESH_MARGIN = 300  # Seconds before expiry to refresh token
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://172.31.98.122")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://172.31.85.43")

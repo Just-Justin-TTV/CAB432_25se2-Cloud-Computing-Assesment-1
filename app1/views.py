@@ -43,7 +43,7 @@ from .dynamo_utils import (
 from . import s3_utils
 
 # ===== Ollama Tags / Cache =====
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://172.31.98.122")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://172.31.85.43")
 
 # Example: initial request to Ollama API
 response = requests.get(f"{OLLAMA_URL}/api/tags")
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 # ===== Ollama Tags / Cache =====
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://172.31.98.122")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://172.31.85.43")
 
 from .models import Resume, JobApplication
 from . import s3_utils
@@ -679,7 +679,7 @@ def call_ollama(payload, retries=10, delay=3):
     """
     Send a request to the Ollama API with retries and return the JSON response.
     """
-    url = f"{os.environ.get('OLLAMA_HOST', 'http://172.31.98.122')}/api/generate"
+    url = f"{os.environ.get('OLLAMA_HOST', 'http://172.31.85.43')}/api/generate"
     for attempt in range(retries):
         try:
             response = requests.post(url, json=payload, timeout=600)
