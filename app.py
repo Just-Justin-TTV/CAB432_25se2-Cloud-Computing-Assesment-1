@@ -36,7 +36,7 @@ def health():
 # ------------------------
 # HTTP Ollama API
 # ------------------------
-@app.route("/api/generate", methods=["POST"])
+@app.route("/api/generate1", methods=["POST"])
 def generate_http():
     data = request.get_json()
     model = data.get("model")
@@ -60,7 +60,7 @@ def generate_http():
 # ------------------------
 # Subprocess Ollama CLI
 # ------------------------
-@app.route("/api/generate1", methods=["POST"])
+@app.route("/api/generate", methods=["POST"])
 def generate_subprocess():
     data = request.get_json()
     model = data.get("model")
