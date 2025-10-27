@@ -144,6 +144,9 @@ AWS_REGION = secrets.get("AWS_REGION", "ap-southeast-2")
 AWS_STORAGE_BUCKET_NAME = secrets.get("AWS_STORAGE_BUCKET_NAME")
 AWS_S3_ENDPOINT_URL = secrets.get("AWS_S3_ENDPOINT_URL")
 
+# Define AWS_BUCKET for backward compatibility
+AWS_BUCKET = os.environ.get("AWS_BUCKET", AWS_STORAGE_BUCKET_NAME)
+
 if USE_S3:
     def get_s3_client():
         """Return an S3 client for AWS or MinIO."""
