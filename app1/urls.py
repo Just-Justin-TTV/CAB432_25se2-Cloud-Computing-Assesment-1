@@ -1,6 +1,10 @@
 from django.contrib import admin  
 from django.urls import path, include
 from app1 import views
+from django.http import HttpResponse
+
+def health(request):
+    return HttpResponse("OK")
 
 urlpatterns = [
     # Admin site
@@ -30,6 +34,7 @@ urlpatterns = [
     path('api/progress/<str:username>/', views.get_resume_progress, name='resume_progress'),             # Get overall resume processing progress
     path('api/progress/<str:username>/<str:task_name>/', views.get_progress, name='get_progress'),      # Get specific task progress
     path('task-progress/<str:task_name>/', views.task_progress_api, name='task_progress_api'),          # API endpoint for frontend polling of task progress
+    path('health/', health),
 
     # Job application detail
     path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),  # View detailed job application

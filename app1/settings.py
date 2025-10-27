@@ -6,6 +6,13 @@ from botocore.exceptions import ClientError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://justinsinghatwal.cab432.com",
+    "http://localhost",
+    "http://127.0.0.1",
+]
+
 # ------------------------------
 # AWS Secrets Manager helper
 # ------------------------------
