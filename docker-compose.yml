@@ -45,7 +45,8 @@ services:
 
     volumes:
       - .:/code
-      - C:\Users\Justin\.aws:/root/.aws:ro
+      - ~/.aws:/root/.aws:ro
+
 
     # Optional healthcheck
     healthcheck:
