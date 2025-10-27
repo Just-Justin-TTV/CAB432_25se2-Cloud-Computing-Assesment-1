@@ -618,28 +618,43 @@ def get_presigned_url(request):
 @csrf_exempt
 def confirm_upload(request):
     """Confirm that a resume file has been uploaded and create a Resume record."""
+    
+    logger.info("confirm_upload called")
+    
     if request.method != "POST":
+        logger.warning(f"Invalid method: {request.method}")
         return JsonResponse({"error": "POST required"}, status=400)
-    data = json.loads(request.body)
-    key = data.get("key")
-    if not key:
-        return JsonResponse({"error": "key required"}, status=400)
 
-    django_user = get_django_user_from_cognito(request)
-    resume_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{key}"
     try:
+        data = json.loads(request.body)
+        key = data.get("key")
+        logger.info(f"Received key: {key}")
+        if not key:
+            logger.error("No key provided in request body")
+            return JsonResponse({"error": "key required"}, status=400)
+
+        django_user = get_django_user_from_cognito(request)
+        logger.info(f"Resolved django_user: {django_user}")
+
+        resume_url = f"https://{settings.AWS_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        logger.info(f"Resume URL: {resume_url}")
+
         resume = Resume.objects.create(s3_file_path=resume_url, user=django_user)
-        
-        return JsonResponse({
+        logger.info(f"Resume object created with ID: {resume.id}")
+
+        response_data = {
             "success": True,
             "resume_id": resume.id,
             "key": key,
             "download_url": f"/resume/download_file/?key={key}",
             "match_url": f"/resume/{resume.id}/match/"
-        })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+        }
+        logger.info(f"Response data: {response_data}")
+        return JsonResponse(response_data)
 
+    except Exception as e:
+        logger.exception("Error in confirm_upload")
+        return JsonResponse({"error": str(e)}, status=500)
 
 # ===== File Download =====
 

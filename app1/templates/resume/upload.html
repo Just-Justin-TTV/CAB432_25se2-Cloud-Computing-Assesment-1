@@ -17,42 +17,61 @@
         <a id="downloadBtn" href="#" class="btn btn-primary" target="_blank" style="margin: 10px; padding: 12px 25px; font-size: 16px; border-radius: 6px;">Download Resume</a>
         <a id="matchBtn" href="#" class="btn btn-success" style="margin: 10px; padding: 12px 25px; font-size: 16px; border-radius: 6px;">Next: Select Job</a>
     </div>
+
+    <!-- Error display -->
+    <div id="uploadError" style="display:none; color:red; text-align:center; margin-top:10px;"></div>
+
 </div>
 
 <script>
 // Handle resume file selection and upload process
 document.getElementById("resumeInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    const errorDiv = document.getElementById("uploadError");
+    errorDiv.style.display = "none";
+    errorDiv.textContent = "";
+
+    if (!file) {
+        console.log("No file selected");
+        return;
+    }
+
+    console.log("File selected:", file.name, file.type);
 
     try {
-        // Request a presigned URL from the server for secure S3 upload
+        console.log("Requesting presigned URL from server...");
         const presignRes = await fetch("/resume/get_presigned_url/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ filename: file.name, content_type: file.type })
         });
-        const { url, key } = await presignRes.json();
+        const presignData = await presignRes.json();
+        console.log("Presign response:", presignData);
+
+        const { url, key } = presignData;
         if (!url) throw new Error("Failed to get presigned URL");
 
-        // Upload the file directly to S3 using the presigned URL
+        console.log("Uploading file to S3...");
         const uploadRes = await fetch(url, {
             method: "PUT",
             headers: { "Content-Type": file.type },
             body: file
         });
+        console.log("Upload response status:", uploadRes.status);
         if (!uploadRes.ok) throw new Error("Upload failed");
 
-        // Confirm the upload with the server and get download/match URLs
+        console.log("Confirming upload with server...");
         const confirmRes = await fetch("/resume/confirm_upload/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ key })
         });
         const confirmData = await confirmRes.json();
+        console.log("Confirm upload response:", confirmData);
+
         if (!confirmData.success) throw new Error("Confirm upload failed");
 
-        // Show download and next action buttons
+        console.log("Showing download and next buttons...");
         const downloadBtn = document.getElementById("downloadBtn");
         const matchBtn = document.getElementById("matchBtn");
         downloadBtn.href = confirmData.download_url;
@@ -60,7 +79,9 @@ document.getElementById("resumeInput").addEventListener("change", async (e) => {
         document.getElementById("uploadOptions").style.display = "block";
 
     } catch (err) {
-        // Handle errors silently or with in-page messaging (optional)
+        console.error("Error during upload process:", err);
+        errorDiv.textContent = "Error uploading resume: " + err.message;
+        errorDiv.style.display = "block";
     }
 });
 </script>
