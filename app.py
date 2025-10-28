@@ -87,7 +87,7 @@ def generate_subprocess():
 
     
     # ------------------------
-# 3️⃣ List models
+# 3 List models
 # ------------------------
 @app.route("/api/models", methods=["GET"])
 def list_models():
@@ -99,7 +99,7 @@ def list_models():
 
 
 # ------------------------
-# 4️⃣ Start Ollama if not running
+# 4 Start Ollama if not running
 # ------------------------
 @app.route("/api/start_ollama", methods=["POST"])
 def start_ollama():
