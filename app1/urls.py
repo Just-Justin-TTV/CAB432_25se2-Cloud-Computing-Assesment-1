@@ -6,12 +6,16 @@ urlpatterns = [
     # Admin site
     path('admin/', admin.site.urls),
 
-    # Authentication URLs
-    path('login/', views.login_view, name='login'),              # Login page
-    path('logout/', views.logout_view, name='logout'),           # Logout action
-    path('register/', views.register_view, name='register'),     # User registration
-    path('confirm/', views.confirm_view, name='confirm'),        # Confirm registration via code
-    path('test-login/', views.test_login, name='test_login'),    # Test login page for development
+    # Auth
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    path('register/', views.register_view, name='register'),
+    path('confirm/', views.confirm_view, name='confirm'),
+    path('test-login/', views.test_login, name='test_login'),
+
+    # MFA
+    path("mfa/setup/", views.mfa_setup_view, name="mfa_setup"),
+    path("mfa/verify/", views.mfa_verify_view, name="mfa_verify"),
 
     # Home and dashboard
     path('', views.home, name='home'),                           # Home page (any logged-in user)
@@ -32,7 +36,11 @@ urlpatterns = [
     path('task-progress/<str:task_name>/', views.task_progress_api, name='task_progress_api'),          # API endpoint for frontend polling of task progress
 
     # Job application detail
-    path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),  # View detailed job application
+    path('job_app/<int:pk>/', views.job_application_detail, name='job_application_detail'),
+    path('mfa_verify/', views.mfa_verify_view, name='otp_verify'),  # <-- add this
+    path("mfa/email/", views.mfa_verify_view, name="email_otp_verify"),
+
+    path("mfa/software/", views.mfa_verify_view, name="mfa_verify"),
 
     # Browser reload (development only)
     path("__reload__/", include("django_browser_reload.urls")),  # Live-reload for frontend development
